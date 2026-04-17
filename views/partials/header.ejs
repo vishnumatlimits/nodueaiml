@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NoDue | <%= title %></title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a href="/" class="brand">NoDue portal</a>
+      <div class="user-meta">
+        <% if (user) { %>
+          <a href="/" class="link-btn">Home</a>
+          <span><%= user.name %> (<%= user.role %>)</span>
+          <form action="/logout" method="POST">
+            <button type="submit" class="link-btn">Logout</button>
+          </form>
+        <% } else { %>
+          <a href="/" class="link-btn">Home</a>
+          <a href="/login" class="link-btn">Login</a>
+        <% } %>
+      </div>
+    </header>
+    <main class="page">

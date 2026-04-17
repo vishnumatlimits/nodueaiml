@@ -1,0 +1,38 @@
+{
+  "name": "nodue",
+  "version": "0.1.0",
+  "description": "College No-Due approval flow with student, faculty, and admin dashboards (Node.js + Express + EJS).",
+  "main": "server.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "keywords": [
+    "nodue",
+    "express",
+    "ejs"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.10",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "mongoose": "^7.6.3",
+    "morgan": "^1.10.0",
+    "multer": "^2.0.2",
+    "mutter": "^1.0.1",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-node": "^11.1.0",
+    "nodemon": "^3.0.3",
+    "prettier": "^3.2.5"
+  }
+}

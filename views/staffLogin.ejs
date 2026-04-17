@@ -1,0 +1,23 @@
+<% const pageTitle = 'Staff Login'; %>
+<%- include('partials/header', { title: pageTitle }) %>
+<section class="auth-grid">
+  <div class="card compact">
+    <h1>Staff login</h1>
+    <p class="muted">Sign in as Faculty or HOD to manage no-due workflows.</p>
+    <% if (error) { %>
+    <div class="alert"><%= error %></div>
+    <% } %>
+    <form method="POST" action="/login" class="stack">
+      <label class="field">
+        <span>Staff ID</span>
+        <input name="staffId" type="text" placeholder="FAC123" required />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input name="password" type="password" placeholder="Enter password" required />
+      </label>
+      <button type="submit" class="btn btn-primary">Continue</button>
+    </form>
+  </div>
+</section>
+<%- include('partials/footer') %>

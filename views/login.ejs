@@ -1,0 +1,453 @@
+<% const pageTitle = 'No-Due Portal'; %>
+<%- include('partials/header', { title: pageTitle }) %>
+
+<section class="auth-grid">
+  <div class="card compact">
+    <h1>Check No-Due status</h1>
+    <% if (searchError) { %>
+      <div class="alert"><%= searchError %></div>
+    <% } %>
+    <form method="POST" action="/student/search" class="stack">
+      <label class="field">
+        <span>Roll number</span>
+        <input name="rollNumber" type="text" placeholder="e.g., 22CSE045" required />
+      </label>
+      <button type="submit" class="btn btn-accent">Search</button>
+    </form>
+  </div>
+</section>
+
+<% if (searchResult) { %>
+  <section class="page">
+    <div>
+      <h2>Subjects for <%= searchResult.rollNumber %></h2>
+      <% if (searchResult.student) { %>
+        <p class="muted">
+          <strong><%= searchResult.student.name %></strong>
+          <% if (searchResult.student.branch) { %> • <%= searchResult.student.branch %><% } %>
+          <% if (searchResult.student.year) { %> • Year <%= searchResult.student.year %><% } %>
+          <% if (searchResult.student.semester) { %> • Sem <%= searchResult.student.semester %><% } %>
+        </p>
+      <% } %>
+
+      <% if (!searchResult.subjects || !searchResult.subjects.length) { %>
+        <p class="muted">No subjects found for this student.</p>
+      <% } else { %>
+        <div class="table-responsive">
+          <table>
+            <tr>
+              <th>Subject code</th>
+              <th>Subject &amp; faculty</th>
+              <th>Assignment 1</th>
+              <th>Assignment 2</th>
+              <th>Remarks</th>
+            </tr>
+            <% searchResult.subjects.forEach(function(sub){ %>
+            <tr>
+              <td><%= sub.subjectCode %></td>
+              <td>
+                <strong><%= sub.subjectName %></strong><br />
+                <% if (sub.facultyName) { %>
+                  <span class="muted">Faculty: <%= sub.facultyName %></span>
+                <% } else { %>
+                  <span class="muted">Faculty: Not assigned</span>
+                <% } %>
+              </td>
+              <td>
+                <% if (sub.assignment1) { %>
+                  <span class="status-pill ok">✓ Approved</span>
+                <% } else { %>
+                  <span class="status-pill pending">✗ Pending</span>
+                <% } %>
+              </td>
+              <td>
+                <% if (sub.assignment2) { %>
+                  <span class="status-pill ok">✓ Approved</span>
+                <% } else { %>
+                  <span class="status-pill pending">✗ Pending</span>
+                <% } %>
+              </td>
+              <td><%= sub.facultyNote && sub.facultyNote.length ? sub.facultyNote : '-' %></td>
+            </tr>
+            <% }) %>
+          </table>
+        </div>
+      <% } %>
+
+      <% if (searchResult.mentorInfo) { %>
+        <h2 style="margin-top:32px;">Mentor information</h2>
+        <p class="muted" id="mentor-overall-status" style="margin-top:6px;">
+          Overall mentor status:
+          <% if (searchResult.mentorInfo.status === 'Approved') { %>
+            <span class="status-pill ok">✓ Approved</span>
+          <% } else { %>
+            <span class="status-pill pending"><%= searchResult.mentorInfo.status || 'Pending Faculty' %></span>
+          <% } %>
+        </p>
+        <div class="table-responsive">
+          <table id="mentor-objectives-table">
+            <tr>
+              <th>Mentor</th>
+              <th>Objective</th>
+              <th>Status</th>
+              <th>Remarks</th>
+            </tr>
+            <% const mentorObjectives = (searchResult.mentorInfo.objectives && searchResult.mentorInfo.objectives.length)
+              ? searchResult.mentorInfo.objectives
+              : [
+                  { name: searchResult.mentorInfo.label1 || 'Objective 1', approved: !!searchResult.mentorInfo.assignment1, status: searchResult.mentorInfo.assignment1 ? 'Approved' : 'Pending Faculty', facultyNote: '' },
+                  { name: searchResult.mentorInfo.label2 || 'Objective 2', approved: !!searchResult.mentorInfo.assignment2, status: searchResult.mentorInfo.assignment2 ? 'Approved' : 'Pending Faculty', facultyNote: '' },
+                ]; %>
+            <% mentorObjectives.forEach(function(obj, idx){ %>
+            <tr>
+              <% if (idx === 0) { %>
+              <td rowspan="<%= mentorObjectives.length %>">
+                <% if (searchResult.mentorInfo.mentorName) { %>
+                  <strong><%= searchResult.mentorInfo.mentorName %></strong>
+                  <% if (searchResult.mentorInfo.mentorFacultyId) { %>
+                    <br /><span class="muted">ID: <%= searchResult.mentorInfo.mentorFacultyId %></span>
+                  <% } %>
+                <% } else if (searchResult.mentorInfo.mentorFacultyId) { %>
+                  <span class="muted"><%= searchResult.mentorInfo.mentorFacultyId %></span>
+                <% } else { %>
+                  <span class="muted">Mentor not assigned</span>
+                <% } %>
+              </td>
+              <% } %>
+              <td><%= obj.name || '-' %></td>
+              <td>
+                <% if (obj.approved || obj.status === 'Approved') { %>
+                  <span class="status-pill ok">✓ Approved</span>
+                <% } else { %>
+                  <span class="status-pill pending"><%= obj.status || 'Pending Faculty' %></span>
+                <% } %>
+              </td>
+              <td><%= obj.facultyNote && obj.facultyNote.length ? obj.facultyNote : '-' %></td>
+            </tr>
+            <% }) %>
+          </table>
+        </div>
+      <% } %>
+
+      <% if (searchResult.objectiveInfo && searchResult.objectiveInfo.objectives && searchResult.objectiveInfo.objectives.length) { %>
+        <h2 style="margin-top:32px;">Objective approvals</h2>
+        <p class="muted" id="objective-overall-status" style="margin-top:6px;">
+          Overall objective status:
+          <% if (searchResult.objectiveInfo.status === 'Approved') { %>
+            <span class="status-pill ok">✓ Approved</span>
+          <% } else { %>
+            <span class="status-pill pending"><%= searchResult.objectiveInfo.status || 'Pending Faculty' %></span>
+          <% } %>
+        </p>
+        <div class="table-responsive">
+          <table id="objective-approvals-table">
+            <tr>
+              <th>Objective</th>
+              <th>Faculty</th>
+              <th>Status</th>
+              <th>Remarks</th>
+            </tr>
+            <% searchResult.objectiveInfo.objectives.forEach(function(obj){ %>
+            <tr>
+              <td><%= obj.name || '-' %></td>
+              <td>
+                <% if (obj.facultyName) { %>
+                  <strong><%= obj.facultyName %></strong>
+                <% } else if (obj.facultyId) { %>
+                  <span class="muted"><%= obj.facultyId %></span>
+                <% } else { %>
+                  <span class="muted">Not assigned</span>
+                <% } %>
+              </td>
+              <td>
+                <% if (obj.approved || obj.status === 'Approved') { %>
+                  <span class="status-pill ok">✓ Approved</span>
+                <% } else { %>
+                  <span class="status-pill pending"><%= obj.status || 'Pending Faculty' %></span>
+                <% } %>
+              </td>
+              <td><%= obj.facultyNote && obj.facultyNote.length ? obj.facultyNote : '-' %></td>
+            </tr>
+            <% }) %>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  </section>
+<% } %>
+
+<script>
+(() => {
+  // Auto-refresh student search results
+  const rollNumberDisplay = document.querySelector('section.page h2');
+  if (!rollNumberDisplay) return; // No search results displayed
+  
+  const rollNumberMatch = rollNumberDisplay.textContent.match(/Subjects for (.+)/);
+  if (!rollNumberMatch) return;
+  
+  const rollNumber = rollNumberMatch[1].trim();
+  let lastUpdateTime = new Date().getTime();
+
+  const updateSubjectTable = (oldData, newData) => {
+    const table = document.querySelector('section.page table');
+    if (!table || !newData.subjects) return;
+
+    const rows = table.querySelectorAll('tbody tr') || table.querySelectorAll('tr');
+    newData.subjects.forEach((newSubj, idx) => {
+      if (!oldData.subjects[idx]) return; // Row doesn't exist in old data
+      
+      const oldSubj = oldData.subjects[idx];
+      const row = rows[idx + 1]; // +1 to skip header
+      if (!row) return;
+
+      // Update assignment 1 status
+      const cells = row.querySelectorAll('td');
+      if (cells[2] && oldSubj.assignment1 !== newSubj.assignment1) {
+        const statusHtml = newSubj.assignment1 
+          ? '<span class="status-pill ok">✓ Approved</span>'
+          : '<span class="status-pill pending">✗ Pending</span>';
+        cells[2].innerHTML = statusHtml;
+        cells[2].style.animation = 'pulse 0.5s ease';
+        setTimeout(() => cells[2].style.animation = '', 500);
+      }
+
+      // Update assignment 2 status
+      if (cells[3] && oldSubj.assignment2 !== newSubj.assignment2) {
+        const statusHtml = newSubj.assignment2
+          ? '<span class="status-pill ok">✓ Approved</span>'
+          : '<span class="status-pill pending">✗ Pending</span>';
+        cells[3].innerHTML = statusHtml;
+        cells[3].style.animation = 'pulse 0.5s ease';
+        setTimeout(() => cells[3].style.animation = '', 500);
+      }
+
+      // Update remarks
+      if (cells[4] && oldSubj.facultyNote !== newSubj.facultyNote) {
+        cells[4].textContent = newSubj.facultyNote || '-';
+        cells[4].style.animation = 'pulse 0.5s ease';
+        setTimeout(() => cells[4].style.animation = '', 500);
+      }
+    });
+  };
+
+  const updateMentorTable = (oldData, newData) => {
+    if (!newData.mentorInfo || !oldData.mentorInfo) return;
+
+    const overallStatus = document.getElementById('mentor-overall-status');
+    if (overallStatus && oldData.mentorInfo.status !== newData.mentorInfo.status) {
+      const isApproved = newData.mentorInfo.status === 'Approved';
+      const statusText = newData.mentorInfo.status || 'Pending Faculty';
+      overallStatus.innerHTML = isApproved
+        ? 'Overall mentor status: <span class="status-pill ok">✓ Approved</span>'
+        : `Overall mentor status: <span class="status-pill pending">${statusText}</span>`;
+      overallStatus.style.animation = 'pulse 0.5s ease';
+      setTimeout(() => overallStatus.style.animation = '', 500);
+    }
+    
+    const mentorTable = document.getElementById('mentor-objectives-table');
+    if (!mentorTable) return;
+
+    const escapeHtml = (value) => String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    const objectives = (newData.mentorInfo.objectives && newData.mentorInfo.objectives.length)
+      ? newData.mentorInfo.objectives
+      : [
+          {
+            name: newData.mentorInfo.label1 || 'Objective 1',
+            approved: !!newData.mentorInfo.assignment1,
+            status: newData.mentorInfo.assignment1 ? 'Approved' : 'Pending Faculty',
+            facultyNote: '',
+          },
+          {
+            name: newData.mentorInfo.label2 || 'Objective 2',
+            approved: !!newData.mentorInfo.assignment2,
+            status: newData.mentorInfo.assignment2 ? 'Approved' : 'Pending Faculty',
+            facultyNote: '',
+          },
+        ];
+
+    const mentorCell = (newData.mentorInfo.mentorName || newData.mentorInfo.mentorFacultyId)
+      ? `<strong>${escapeHtml(newData.mentorInfo.mentorName || newData.mentorInfo.mentorFacultyId || '-')}</strong>${newData.mentorInfo.mentorFacultyId ? `<br /><span class="muted">ID: ${escapeHtml(newData.mentorInfo.mentorFacultyId)}</span>` : ''}`
+      : '<span class="muted">Mentor not assigned</span>';
+
+    const rowsHtml = objectives.map((obj, idx) => {
+      const statusHtml = obj.approved || obj.status === 'Approved'
+        ? '<span class="status-pill ok">✓ Approved</span>'
+        : `<span class="status-pill pending">${escapeHtml(obj.status || 'Pending Faculty')}</span>`;
+      return `
+        <tr>
+          ${idx === 0 ? `<td rowspan="${objectives.length}">${mentorCell}</td>` : ''}
+          <td>${escapeHtml(obj.name || '-')}</td>
+          <td>${statusHtml}</td>
+          <td>${escapeHtml(obj.facultyNote || '-')}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const tbodyHtml = `
+      <tr>
+        <th>Mentor</th>
+        <th>Objective</th>
+        <th>Status</th>
+        <th>Remarks</th>
+      </tr>
+      ${rowsHtml}
+    `;
+
+    mentorTable.innerHTML = tbodyHtml;
+    mentorTable.style.animation = 'pulse 0.5s ease';
+    setTimeout(() => mentorTable.style.animation = '', 500);
+  };
+
+  const updateObjectiveTable = (oldData, newData) => {
+    if (!newData.objectiveInfo) return;
+
+    const overallStatus = document.getElementById('objective-overall-status');
+    if (overallStatus) {
+      const isApproved = newData.objectiveInfo.status === 'Approved';
+      const statusText = newData.objectiveInfo.status || 'Pending Faculty';
+      overallStatus.innerHTML = isApproved
+        ? 'Overall objective status: <span class="status-pill ok">✓ Approved</span>'
+        : `Overall objective status: <span class="status-pill pending">${statusText}</span>`;
+    }
+
+    const objectiveTable = document.getElementById('objective-approvals-table');
+    if (!objectiveTable) return;
+
+    const escapeHtml = (value) => String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    const rowsHtml = (newData.objectiveInfo.objectives || []).map((obj) => {
+      const statusHtml = obj.approved || obj.status === 'Approved'
+        ? '<span class="status-pill ok">✓ Approved</span>'
+        : `<span class="status-pill pending">${escapeHtml(obj.status || 'Pending Faculty')}</span>`;
+      const facultyHtml = obj.facultyName
+        ? `<strong>${escapeHtml(obj.facultyName)}</strong>`
+        : (obj.facultyId ? `<span class="muted">${escapeHtml(obj.facultyId)}</span>` : '<span class="muted">Not assigned</span>');
+
+      return `
+        <tr>
+          <td>${escapeHtml(obj.name || '-')}</td>
+          <td>${facultyHtml}</td>
+          <td>${statusHtml}</td>
+          <td>${escapeHtml(obj.facultyNote || '-')}</td>
+        </tr>
+      `;
+    }).join('');
+
+    objectiveTable.innerHTML = `
+      <tr>
+        <th>Objective</th>
+        <th>Faculty</th>
+        <th>Status</th>
+        <th>Remarks</th>
+      </tr>
+      ${rowsHtml}
+    `;
+  };
+
+  const pollStatus = async () => {
+    try {
+      const response = await fetch('/api/student/search-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rollNumber }),
+      });
+
+      if (!response.ok) return;
+      
+      const newData = await response.json();
+      if (!newData.subjects) return;
+
+      // Get current displayed data
+      let oldData = null;
+      const script = document.querySelector('script[data-old-state]');
+      if (script && script.textContent.trim()) {
+        try {
+          oldData = JSON.parse(script.textContent);
+        } catch {
+          // First load, store current state
+          oldData = newData;
+        }
+      } else {
+        // First poll, initialize old data with current display
+        const oldSubjects = [];
+        const rows = document.querySelector('section.page table')?.querySelectorAll('tbody tr') || 
+                    document.querySelectorAll('section.page table tr');
+        rows.forEach((row, idx) => {
+          if (idx === 0) return; // Skip header
+          const cells = row.querySelectorAll('td');
+          if (cells.length < 5) return;
+          
+          oldSubjects.push({
+            subjectCode: cells[0]?.textContent.trim() || '',
+            subjectName: cells[1]?.textContent.split('\n')[0].trim() || '',
+            assignment1: cells[2]?.textContent.includes('Approved') || false,
+            assignment2: cells[3]?.textContent.includes('Approved') || false,
+            facultyNote: cells[4]?.textContent.trim() === '-' ? '' : cells[4]?.textContent.trim() || '',
+          });
+        });
+
+        // Try to get mentor info from DOM
+        let oldMentorInfo = null;
+        const mentorTables = document.querySelectorAll('section.page table');
+        if (mentorTables.length >= 2) {
+          const mentorTable = mentorTables[1];
+          const mentorRows = mentorTable.querySelectorAll('tr');
+          if (mentorRows.length >= 3) {
+            oldMentorInfo = {
+              assignment1: mentorRows[1]?.querySelector('td:last-child')?.textContent.includes('Approved') || false,
+              assignment2: mentorRows[2]?.querySelector('td:last-child')?.textContent.includes('Approved') || false,
+            };
+          }
+        }
+
+        oldData = {
+          rollNumber,
+          subjects: oldSubjects,
+          mentorInfo: oldMentorInfo,
+        };
+      }
+
+      // Update DOM if changes detected
+      if (JSON.stringify(oldData.subjects) !== JSON.stringify(newData.subjects)) {
+        updateSubjectTable(oldData, newData);
+      }
+
+      if (oldData.mentorInfo && newData.mentorInfo &&
+          JSON.stringify(oldData.mentorInfo) !== JSON.stringify(newData.mentorInfo)) {
+        updateMentorTable(oldData, newData);
+      }
+
+      if ((oldData.objectiveInfo || newData.objectiveInfo) &&
+          JSON.stringify(oldData.objectiveInfo || null) !== JSON.stringify(newData.objectiveInfo || null)) {
+        updateObjectiveTable(oldData, newData);
+      }
+
+      // Store new state for next comparison
+      lastUpdateTime = new Date().getTime();
+    } catch (err) {
+      console.error('Status poll failed:', err);
+    }
+  };
+
+  // Start polling every 3 seconds
+  setInterval(pollStatus, 3000);
+})();
+</script>
+
+<style>
+  @keyframes pulse {
+    0%, 100% { background-color: transparent; }
+    50% { background-color: rgba(16, 185, 129, 0.1); }
+  }
+</style>

@@ -1,0 +1,1375 @@
+<% const pageTitle = 'HOD Dashboard'; %>
+<%- include('partials/header', { title: pageTitle }) %>
+
+<div class="layout-wrap">
+	<aside class="sidebar">
+		<h2>HOD</h2>
+		<a href="#hod-subject-data" data-target="hod-subject-data" class="active">Approvals</a>
+		<a href="#hod-mentee-data" data-target="hod-mentee-data">Mentee approvals</a>
+		<a href="#student-clearance-search" data-target="student-clearance-search">Student clearance search</a>
+		<a href="#manage-students" data-target="manage-students">Manage students</a>
+		<a href="#manage-faculty" data-target="manage-faculty">Manage faculty</a>
+		<a href="#manage-subjects" data-target="manage-subjects">Manage subjects</a>
+		<a href="#manage-mentors" data-target="manage-mentors">Manage mentors</a>
+		<a href="#manage-objective-approvals" data-target="manage-objective-approvals">Objective approvals</a>
+		<a href="#profile" data-target="profile">Profile</a>
+		<form action="/logout" method="POST">
+			<button type="submit" class="link-btn logout">Logout</button>
+		</form>
+	</aside>
+
+	<section class="content stack">
+		<div class="panel" data-panel="profile">
+			<div class="card" id="profile">
+				<div class="flex-between">
+					<h2>Profile</h2>
+					<span class="badge">Update your info</span>
+				</div>
+				<% if (profileError) { %>
+					<div class="alert"><%= profileError %></div>
+				<% } %>
+				<% if (profileSuccess) { %>
+					<div class="alert success"><%= profileSuccess %></div>
+				<% } %>
+
+				<form action="/hod/profile" method="POST" class="stack">
+					<label class="field">
+						<span>Name</span>
+						<input type="text" name="name" value="<%= self?.name || '' %>" placeholder="Enter name" />
+					</label>
+					<label class="field">
+						<span>Faculty ID</span>
+						<input type="text" name="facultyId" value="<%= self?.facultyId || '' %>" placeholder="Enter faculty ID" />
+					</label>
+					<label class="field">
+						<span>New password</span>
+						<input type="password" name="password" placeholder="Leave blank to keep current" />
+					</label>
+					<p class="muted">Change any field and submit. Password updates are stored securely.</p>
+					<button type="submit" class="btn btn-accent">Save changes</button>
+				</form>
+			</div>
+		</div>
+
+		<div class="panel" data-panel="hod-subject-data">
+			<div class="card">
+				<div class="flex-between">
+					<h2 id="hod-subject-data">Subject wise Faculty Approval Information</h2>
+					<span class="badge"><%= subjectGroups && subjectGroups.length ? subjectGroups.length + ' subjects' : 'No subjects' %></span>
+				</div>
+
+				<div class="card" style="margin-top: 14px;">
+					<div class="flex-between">
+						<h3>Pending HOD Approvals By Subject Code</h3>
+						<span class="badge"><%= pendingSubjectGroups && pendingSubjectGroups.length ? pendingSubjectGroups.length + ' groups' : 'No pending approvals' %></span>
+					</div>
+
+					<% if (!pendingSubjectGroups || !pendingSubjectGroups.length) { %>
+						<p class="muted">No pending HOD approvals available.</p>
+					<% } else { %>
+						<% pendingSubjectGroups.forEach(function(group){ %>
+							<div class="card subject-group-card" data-subject="<%= group.subjectCode || 'GENERAL' %>" style="margin-top: 12px;">
+								<h4 style="margin-bottom:10px;">
+									Subject Code: <%= group.subjectCode || 'GENERAL' %>
+									<small style="font-weight:400;color:#6b7280;"> - <%= group.subjectName || 'N/A' %></small>
+								</h4>
+								<table>
+									<tr>
+										<th>Roll Number</th>
+										<th>Student Name</th>
+										<th>Branch</th>
+										<th>Year</th>
+										<th>Semester</th>
+										<th>Status</th>
+										<th>Action</th>
+									</tr>
+									<% group.rows.forEach(function(r){ %>
+										<tr>
+											<td><%= r.rollNumber || '-' %></td>
+											<td><%= r.studentName || '-' %></td>
+											<td><%= r.branch || '-' %></td>
+											<td><%= r.year || '-' %></td>
+											<td><%= r.semester || '-' %></td>
+											<td><%= r.status || '-' %></td>
+											<td>
+												<div style="display:flex; gap:6px; flex-wrap:wrap;">
+													<form action="/hod/requests/<%= r.id %>/approve" method="POST">
+														<input type="hidden" name="redirectPanel" value="hod-subject-data" />
+														<button type="submit" class="btn btn-accent btn-sm">Approve</button>
+													</form>
+													<form action="/hod/requests/<%= r.id %>/deny" method="POST">
+														<input type="hidden" name="redirectPanel" value="hod-subject-data" />
+														<button type="submit" class="btn btn-danger btn-sm">Deny</button>
+													</form>
+												</div>
+											</td>
+										</tr>
+									<% }); %>
+								</table>
+							</div>
+						<% }); %>
+					<% } %>
+				</div>
+
+				<% if (!subjectGroups || !subjectGroups.length) { %>
+					<p class="muted">No subject-wise approvals available yet.</p>
+				<% } else { %>
+					<form action="/faculty/requests/bulk-assignments" method="POST">
+						<% subjectGroups.forEach(function(group){ %>
+							<div class="card subject-group-card" data-subject="<%= group.subjectCode %>" style="margin-top:16px;">
+								<h3><%= group.subjectName %> <small style="font-weight:400;color:#6b7280;">(<%= group.subjectCode || 'Code N/A' %>)</small></h3>
+								<table>
+									<tr>
+										<th>S.No</th>
+										<th>Roll Number</th>
+										<th>Subject</th>
+										<th>Assignment 1</th>
+										<th>Assignment 2</th>
+										<th>Remarks</th>
+									</tr>
+									<% group.rows.forEach(function(r, idx){ %>
+										<tr>
+											<td><%= idx + 1 %></td>
+											<td><%= r.rollNumber || '-' %></td>
+											<td><%= r.subjectName || group.subjectName %></td>
+											<td style="text-align:center;">
+												<input type="checkbox" name="assignments[<%= r.id %>][assignment1]" <%= r.assignment1 ? 'checked' : '' %> />
+											</td>
+											<td style="text-align:center;">
+												<input type="checkbox" name="assignments[<%= r.id %>][assignment2]" <%= r.assignment2 ? 'checked' : '' %> />
+											</td>
+											<td>
+												<input
+													type="text"
+													name="assignments[<%= r.id %>][facultyNote]"
+													value="<%= r.facultyNote || '' %>"
+													placeholder="Remarks"
+													style="width:100%;max-width:260px;"
+												/>
+											</td>
+										</tr>
+									<% }); %>
+								</table>
+							</div>
+						<% }); %>
+						<div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center;">
+							<p style="color:#6b7280;font-size:0.9rem;margin:0;"><em>Auto-saves on each change</em></p>
+							<button type="submit" class="btn btn-accent">Save all (Manual backup)</button>
+						</div>
+					</form>
+				<% } %>
+			</div>
+		</div>
+
+		<div class="panel" data-panel="hod-mentee-data">
+			<div class="card">
+				<div class="flex-between">
+					<h2 id="hod-mentee-data">HOD mentee requests</h2>
+					<span class="badge"><%= hodMentorRequests && hodMentorRequests.length ? hodMentorRequests.length + ' pending' : 'No pending mentee requests' %></span>
+				</div>
+
+				<div style="display:flex; gap:10px; flex-wrap:wrap; margin:12px 0 16px;">
+					<form action="/hod/requests/generate-mentor-subjects" method="POST">
+						<button type="submit" class="btn btn-outline-primary">Create mentor requests</button>
+					</form>
+				</div>
+
+				<% if (!hodMentorRequests || !hodMentorRequests.length) { %>
+					<p class="muted">No mentor-related requests pending for HOD review.</p>
+				<% } else { %>
+					<table>
+						<tr>
+							<th>Student</th>
+							<th>Roll number</th>
+							<th>Mentor subject</th>
+							<th>Branch / Year</th>
+							<th>Status</th>
+							<th>Action</th>
+						</tr>
+						<% hodMentorRequests.forEach(function(r){ %>
+							<tr>
+								<td><%= r.studentName || '-' %></td>
+								<td><%= r.rollNumber || '-' %></td>
+								<td><%= r.subjectName || r.reason || '-' %></td>
+								<td><%= r.branch || '-' %><% if (r.year) { %> • Year <%= r.year %><% } %></td>
+								<td><%= r.status || '-' %></td>
+								<td>
+									<form action="/hod/requests/<%= r.id %>/approve" method="POST" style="display:inline">
+										<input type="hidden" name="redirectPanel" value="hod-mentee-data" />
+										<button type="submit" class="btn btn-accent">Approve</button>
+									</form>
+								</td>
+							</tr>
+						<% }); %>
+					</table>
+				<% } %>
+			</div>
+		</div>
+
+		<div class="panel" data-panel="student-clearance-search">
+			<div class="card">
+				<div class="flex-between">
+					<h2 id="student-clearance-search">Student clearance search</h2>
+					<span class="badge">Search by roll number</span>
+				</div>
+				<form id="hod-clearance-search-form" class="stack" style="margin-top:12px;">
+					<label class="field">
+						<span>Roll number</span>
+						<input type="text" id="hod-clearance-roll" placeholder="Enter roll number" required />
+					</label>
+					<button type="submit" class="btn btn-accent">Search clearance</button>
+				</form>
+				<div id="hod-clearance-result" style="margin-top:16px;"></div>
+			</div>
+		</div>
+
+		<div class="panel" data-panel="manage-faculty">
+			<div class="card" id="manage-faculty">
+			<div class="flex-between">
+				<h2>Manage faculty</h2>
+				<span class="badge">Add / edit</span>
+			</div>
+			<form action="/hod/faculty" method="POST" class="stack">
+				<div class="grid two">
+					<label class="field">
+						<span>Name</span>
+						<input type="text" name="name" placeholder="Enter Name" required />
+					</label>
+					<label class="field">
+						<span>Faculty ID</span>
+						<input type="text" name="facultyId" placeholder="Enter Faculty ID" required />
+					</label>
+				</div>
+				<div class="grid two">
+					<label class="field">
+						<span>Password</span>
+						<input type="password" name="password" placeholder="Enter password" required />
+					</label>
+					<label class="field">
+						<span>Department</span>
+						<select name="department" required>
+							<option value="">Select department</option>
+							<option value="CSM">CSM</option>
+							<option value="CSN">CSN</option>
+							<option value="CSE">CSE</option>
+							<option value="ECE">ECE</option>
+							<option value="ME">ME</option>
+							<option value="Civil">Civil</option>
+							<option value="EEE">EEE</option>
+						</select>
+					</label>
+				</div>
+				<button type="submit" class="btn btn-accent">Add faculty</button>
+			</form>
+
+			<div class="card">
+				<div class="flex-between">
+					<h3>Faculty list</h3>
+					<span class="badge"><%= faculties.length %> total</span>
+				</div>
+				<table>
+					<tr>
+						<th>Name</th>
+						<th>Faculty ID</th>
+						<th>Department</th>
+						<th>New password</th>
+						<th>Edit</th>
+						<th>Delete</th>
+					</tr>
+					<% faculties.forEach((f) => { const formId = `edit-fac-${f.facultyId}`; %>
+					<tr>
+						<form id="<%= formId %>" action="/hod/faculty/<%= f.facultyId %>/update" method="POST"></form>
+						<td><input form="<%= formId %>" name="name" value="<%= f.name %>" required /></td>
+						<td><input form="<%= formId %>" name="newFacultyId" value="<%= f.facultyId %>" required /></td>
+						<td>
+							<select form="<%= formId %>" name="department" required>
+								<option value="CSM" <%= f.department === 'CSM' ? 'selected' : '' %>>CSM</option>
+								<option value="CSN" <%= f.department === 'CSN' ? 'selected' : '' %>>CSN</option>
+								<option value="CSE" <%= f.department === 'CSE' ? 'selected' : '' %>>CSE</option>
+								<option value="ECE" <%= f.department === 'ECE' ? 'selected' : '' %>>ECE</option>
+								<option value="ME" <%= f.department === 'ME' ? 'selected' : '' %>>ME</option>
+								<option value="Civil" <%= f.department === 'Civil' ? 'selected' : '' %>>Civil</option>
+								<option value="EEE" <%= f.department === 'EEE' ? 'selected' : '' %>>EEE</option>
+							</select>
+						</td>
+						<td><input form="<%= formId %>" name="password" type="password" placeholder="New password (optional)" /></td>
+						<td>
+							<button type="button" class="btn btn-outline-primary edit-btn" data-type="faculty" data-id="<%= f.facultyId %>" data-name="<%= f.name %>" data-department="<%= f.department %>">Edit</button>
+						</td>
+						<td>
+							<form action="/hod/faculty/<%= f.facultyId %>/delete" method="POST" onsubmit="return confirm('Delete this faculty?');">
+								<button type="submit" class="btn btn-danger">Delete</button>
+							</form>
+						</td>
+					</tr>
+					<% }); %>
+				</table>
+			</div>
+			</div>
+		</div>
+
+		<div class="panel" data-panel="manage-students">
+			<div class="card" id="manage-students">
+			<div class="flex-between">
+				<h2>Manage students</h2>
+				<span class="badge">Add / edit</span>
+			</div>
+			<form action="/hod/students" method="POST" class="stack">
+				<div class="grid two">
+					<label class="field">
+						<span>Roll number</span>
+						<input type="text" name="rollNumber" placeholder="Enter Roll Number" required />
+					</label>
+					<label class="field">
+						<span>Name</span>
+						<input type="text" name="name" placeholder="Enter Name" required />
+					</label>
+				</div>
+				<div class="grid two">
+					<label class="field">
+						<span>Branch</span>
+						<input type="text" name="branch" placeholder="e.g., CSE" />
+					</label>
+					<label class="field">
+						<span>Department</span>
+						<input type="text" name="department" placeholder="e.g., CSM" />
+					</label>
+				</div>
+				<div class="grid two">
+					<label class="field">
+						<span>Year</span>
+						<input type="text" name="year" placeholder="e.g., II" />
+					</label>
+					<label class="field">
+						<span>Semester</span>
+						<input type="text" name="semester" placeholder="e.g., I or II" />
+					</label>
+				</div>
+				<div class="grid two">
+					<label class="field">
+						<span>Section</span>
+						<input type="text" name="section" placeholder="A / B / C" />
+					</label>
+					<label class="field">
+						<span>Mentor (faculty ID)</span>
+						<input type="text" name="mentorFacultyId" placeholder="e.g., FAC101" />
+					</label>
+				</div>
+				<label class="field">
+					<span>Mentor notes / objectives</span>
+					<textarea name="mentorNotes" rows="2" placeholder="Any mentor objectives or notes"></textarea>
+				</label>
+				<button type="submit" class="btn btn-accent">Add student</button>
+			</form>
+
+			<div class="card" style="margin-top:16px;">
+				<div class="flex-between">
+					<h3>Bulk import students (CSV)</h3>
+					<span class="badge">Upload file</span>
+				</div>
+				<p class="muted">Upload a CSV file with columns: rollNumber, name, branch, department, year, semester, section, mentorFacultyId.</p>
+				<form action="/hod/students/import" method="POST" enctype="multipart/form-data" class="stack">
+					<label class="field">
+						<span>CSV file</span>
+						<input type="file" name="csv" accept=".csv" required />
+					</label>
+					<button type="submit" class="btn btn-outline-primary">Import from CSV</button>
+				</form>
+			</div>
+
+			<div class="card">
+				<div class="flex-between">
+					<h3>Student list</h3>
+					<span class="badge"><%= students.length %> total</span>
+				</div>
+				<table>
+					<tr>
+						<th>Roll number</th>
+						<th>Name</th>
+						<th>Branch</th>
+						<th>Dept</th>
+						<th>Year</th>
+						<th>Sem</th>
+						<th>Section</th>
+						<th>Mentor</th>
+						<th>Edit</th>
+						<th>Delete</th>
+					</tr>
+					<% students.forEach((s) => { const formId = `edit-${s.rollNumber}`; %>
+					<tr>
+						<form id="<%= formId %>" action="/hod/students/<%= s.rollNumber %>/update" method="POST"></form>
+						<td><input form="<%= formId %>" name="rollNumber" value="<%= s.rollNumber %>" required /></td>
+						<td><input form="<%= formId %>" name="name" value="<%= s.name %>" required /></td>
+						<td><input form="<%= formId %>" name="branch" value="<%= s.branch || '' %>" /></td>
+						<td><input form="<%= formId %>" name="department" value="<%= s.department || '' %>" /></td>
+						<td><input form="<%= formId %>" name="year" value="<%= s.year || '' %>" /></td>
+						<td><input form="<%= formId %>" name="semester" value="<%= s.semester || '' %>" /></td>
+						<td><input form="<%= formId %>" name="section" value="<%= s.section || '' %>" /></td>
+						<td><input form="<%= formId %>" name="mentorFacultyId" value="<%= s.mentorFacultyId || '' %>" /></td>
+						<td>
+							<button
+								type="button"
+								class="edit-btn"
+								data-type="student"
+								data-id="<%= s.rollNumber %>"
+								data-name="<%= s.name %>"
+								data-branch="<%= s.branch || '' %>"
+								data-department="<%= s.department || '' %>"
+								data-year="<%= s.year || '' %>"
+								data-semester="<%= s.semester || '' %>"
+								data-section="<%= s.section || '' %>"
+								data-mentor="<%= s.mentorFacultyId || '' %>"
+								data-notes="<%= s.mentorNotes || '' %>"
+							>
+								Edit
+							</button>
+						</td>
+						<td>
+							<form action="/hod/students/<%= s.rollNumber %>/delete" method="POST" onsubmit="return confirm('Delete this student?');">
+								<button type="submit" class="danger">Delete</button>
+							</form>
+						</td>
+					</tr>
+					<% }); %>
+				</table>
+			</div>
+
+		<% const departments = []; students.forEach((s) => { if (s.department && !departments.includes(s.department)) departments.push(s.department); }); %>
+		<div class="card" style="margin-top:16px;">
+			<div class="flex-between">
+				<h3>Students by department</h3>
+				<span class="badge"><%= departments.length %> departments</span>
+			</div>
+			<% if (!departments.length) { %>
+				<p class="muted">No departments found on student records.</p>
+			<% } else { %>
+				<div style="margin:8px 0; display:flex; flex-wrap:wrap; gap:8px;">
+					<button type="button" class="btn btn-outline-primary dept-chip active" data-dept="__all">All</button>
+					<% departments.forEach(function(d){ %>
+						<button type="button" class="btn btn-outline-primary dept-chip" data-dept="<%= d %>"><%= d %></button>
+					<% }); %>
+				</div>
+				<table id="dept-students-table">
+					<tr>
+						<th>Roll number</th>
+						<th>Name</th>
+						<th>Branch</th>
+						<th>Dept</th>
+						<th>Year</th>
+						<th>Sem</th>
+						<th>Section</th>
+					</tr>
+					<tbody>
+						<% students.forEach((s) => { %>
+						<tr data-dept="<%= s.department || '' %>">
+							<td><%= s.rollNumber %></td>
+							<td><%= s.name %></td>
+							<td><%= s.branch || '-' %></td>
+							<td><%= s.department || '-' %></td>
+							<td><%= s.year || '-' %></td>
+							<td><%= s.semester || '-' %></td>
+							<td><%= s.section || '-' %></td>
+						</tr>
+						<% }); %>
+					</tbody>
+				</table>
+			<% } %>
+		</div>
+			</div>
+		</div>
+
+			<div class="panel" data-panel="manage-subjects">
+				<div class="card" id="manage-subjects">
+					<div class="flex-between">
+						<h2>Manage subjects</h2>
+						<span class="badge">Add / edit</span>
+					</div>
+					<div class="card" style="margin-top:12px;">
+						<div class="flex-between">
+							<h3>Request maintenance</h3>
+							<span class="badge">Database actions</span>
+						</div>
+						<p class="muted">Use these controls to reset and rebuild approval requests for subject allocations.</p>
+						<div style="display:flex;gap:10px;flex-wrap:wrap;">
+							<form action="/hod/requests/generate-all" method="POST">
+								<button type="submit" class="btn btn-accent">Create requests for all students</button>
+							</form>
+							<form action="/hod/requests/delete-all" method="POST" onsubmit="return confirm('Delete ALL approval requests from the database? This cannot be undone.');">
+								<button type="submit" class="btn btn-danger">Delete all approval requests</button>
+							</form>
+						</div>
+					</div>
+					<form action="/hod/subjects" method="POST" class="stack">
+						<div class="grid two">
+							<label class="field">
+								<span>Subject code</span>
+								<input type="text" name="subjectCode" placeholder="Enter Subject Code" required />
+							</label>
+							<label class="field">
+								<span>Subject name</span>
+								<input type="text" name="subjectName" placeholder="Enter Subject Name" required />
+							</label>
+						</div>
+						<div class="grid two">
+							<label class="field">
+								<span>Branch(es)</span>
+								<input type="text" name="branches" placeholder="e.g., CSE, CSM" />
+							</label>
+							<label class="field">
+								<span>Year</span>
+								<input type="text" name="year" placeholder="e.g., II" />
+							</label>
+						</div>
+						<div class="grid two">
+							<label class="field">
+								<span>Semester</span>
+								<input type="text" name="semester" placeholder="e.g., I or II" />
+							</label>
+							<label class="field">
+								<span>Default Faculty (for all sections)</span>
+								<select name="facultyIds">
+									<option value="">Select faculty</option>
+									<% faculties.forEach(function(f){ %>
+									<option value="<%= f.facultyId %>"><%= f.name %> (<%= f.facultyId %>)</option>
+									<% }) %>
+								</select>
+							</label>
+						</div>
+
+						<!-- Section-wise Faculty Assignment -->
+						<fieldset>
+							<legend style="font-weight: 600; margin-bottom: 12px;">Section-wise faculty assignment (optional)</legend>
+							<p class="muted" style="margin-bottom: 12px;">Assign different faculty to the same subject for different sections (e.g., Section A → Faculty 1, Section B → Faculty 2)</p>
+							<div id="sectionFacultyContainer">
+								<!-- Dynamic section rows will be added here -->
+							</div>
+							<button type="button" id="addSectionBtn" class="btn btn-outline-primary" style="margin-top: 12px;">+ Add section mapping</button>
+						</fieldset>
+
+						<button type="submit" class="btn btn-accent">Add subject</button>
+					</form>
+
+					<style>
+						.section-row { display: flex; gap: 10px; align-items: flex-end; margin-bottom: 10px; }
+						.section-row input, .section-row select { margin: 0; }
+						.section-row button { padding: 8px 12px; }
+					</style>
+
+					<script>
+						document.getElementById('addSectionBtn').addEventListener('click', function(e) {
+							e.preventDefault();
+							const container = document.getElementById('sectionFacultyContainer');
+							const row = document.createElement('div');
+							row.className = 'section-row';
+							row.innerHTML = `
+								<input type="text" name="sectionNames" placeholder="Section (e.g., A, B)" style="flex: 0.3;" />
+								<select name="sectionFacultyIds" style="flex: 1;">
+									<option value="">Select faculty</option>
+								</select>
+								<button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove();">Remove</button>
+							`;
+							const select = row.querySelector('select');
+							const facultiesData = <%- JSON.stringify(faculties) %>;
+							facultiesData.forEach(function(f) {
+								const opt = document.createElement('option');
+								opt.value = f.facultyId;
+								opt.textContent = f.name + ' (' + f.facultyId + ')';
+								select.appendChild(opt);
+							});
+							container.appendChild(row);
+						});
+					</script>
+
+					<div class="card">
+						<div class="flex-between">
+							<h3>Subjects list</h3>
+							<span class="badge"><%= subjects.length %> total</span>
+						</div>
+						<table>
+							<tr>
+								<th>Subject code</th>
+								<th>Subject name</th>
+								<th>Branch(es)</th>
+								<th>Year</th>
+								<th>Semester</th>
+								<th>Faculty allocated</th>
+								<th>Section assignments</th>
+								<th>Edit</th>
+								<th>Save</th>
+								<th>Delete</th>
+							</tr>
+							<% subjects.forEach((sub) => { const formId = `edit-sub-${sub.subjectCode}-${sub.branch || 'none'}`; %>
+							<tr>
+								<form id="<%= formId %>" action="/hod/subjects/<%= sub.subjectCode %>/update" method="POST"></form>
+								<td><input form="<%= formId %>" name="subjectCode" value="<%= sub.subjectCode %>" required /></td>
+								<td><input form="<%= formId %>" name="subjectName" value="<%= sub.subjectName %>" required /></td>
+								<td>
+									<% const branchList = (sub.branches && sub.branches.length) ? sub.branches : (sub.branch ? [sub.branch] : []); %>
+									<input form="<%= formId %>" name="branches" value="<%= branchList[0] || '' %>" placeholder="e.g., CSE" />
+									<input form="<%= formId %>" type="hidden" name="originalBranch" value="<%= branchList[0] || '' %>" />
+								</td>
+								<td><input form="<%= formId %>" name="year" value="<%= sub.year || '' %>" /></td>
+								<td><input form="<%= formId %>" name="semester" value="<%= sub.semester || '' %>" /></td>
+								<td>
+									<select form="<%= formId %>" name="facultyIds">
+										<option value="">Select faculty</option>
+										<% const assigned = (sub.facultyIds && sub.facultyIds.length) ? sub.facultyIds[0] : null; %>
+										<% faculties.forEach(function(f){ %>
+											<option value="<%= f.facultyId %>" <%= assigned === f.facultyId ? 'selected' : '' %>><%= f.name %> (<%= f.facultyId %>)</option>
+										<% }) %>
+									</select>
+								</td>
+								<td>
+									<div id="sectionContainer-<%= formId %>" style="display: flex; flex-direction: column; gap: 6px;">
+										<% if (sub.sectionFaculty && sub.sectionFaculty.length) { %>
+											<% sub.sectionFaculty.forEach((sf, idx) => { %>
+												<div style="display: flex; gap: 6px; align-items: center; font-size: 0.9em;">
+													<span style="font-weight: 600;">Sec <%= sf.section %>:</span>
+													<% const secFac = faculties.find(f => f.facultyId === sf.facultyId); %>
+													<span><%= secFac ? secFac.name : sf.facultyId %></span>
+													<button type="button" class="btn-sm btn-outline-danger remove-section" data-form="<%= formId %>" data-index="<%= idx %>" onclick="event.preventDefault();">✕</button>
+												</div>
+												<input form="<%= formId %>" type="hidden" name="sectionNames" value="<%= sf.section %>" />
+												<input form="<%= formId %>" type="hidden" name="sectionFacultyIds" value="<%= sf.facultyId %>" />
+											<% }); %>
+										<% } %>
+									</div>
+									<button type="button" class="btn btn-outline-primary btn-sm" style="margin-top: 6px;" onclick="addEditSectionRow('<%= formId %>', event);">+ Add section</button>
+								</td>
+								<td>
+									<button
+										type="button"
+										class="btn btn-outline-primary edit-btn"
+										data-type="subject"
+										data-code="<%= sub.subjectCode %>"
+										data-name="<%= sub.subjectName %>"
+										data-year="<%= sub.year %>"
+										data-semester="<%= sub.semester %>"
+										data-branch="<%= branchList[0] || '' %>"
+										data-faculty-id="<%= (sub.facultyIds && sub.facultyIds[0]) ? sub.facultyIds[0] : '' %>"
+										data-section-faculty="<%= encodeURIComponent(JSON.stringify(sub.sectionFaculty || [])) %>"
+									>
+										Edit
+									</button>
+								</td>
+								<td><button form="<%= formId %>" type="submit" class="btn btn-accent">Save</button></td>
+								<td>
+									<form action="/hod/subjects/<%= sub.subjectCode %>/delete" method="POST" onsubmit="return confirm('Delete this subject?');">
+										<input type="hidden" name="originalBranch" value="<%= branchList[0] || '' %>" />
+										<button type="submit" class="btn btn-danger">Delete</button>
+									</form>
+								</td>
+							</tr>
+							<% }); %>
+						</table>
+					</div>
+
+					<style>
+						.btn-sm { padding: 4px 8px !important; font-size: 0.85em !important; }
+					</style>
+
+					<script>
+						function addEditSectionRow(formId, e) {
+							e.preventDefault();
+							const container = document.getElementById('sectionContainer-' + formId);
+							const row = document.createElement('div');
+							row.style.display = 'flex'; row.style.gap = '6px'; row.style.alignItems = 'center'; row.style.marginBottom = '6px';
+							row.innerHTML = `
+								<input form="${formId}" type="text" name="sectionNames" placeholder="Sec" style="flex: 0.2;" />
+								<select form="${formId}" name="sectionFacultyIds" style="flex: 1;">
+									<option value="">Select faculty</option>
+									<% faculties.forEach(function(f){ %>
+									<option value="<%= f.facultyId %>"><%= f.name %> (<%= f.facultyId %>)</option>
+									<% }) %>
+								</select>
+								<button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove();" style="flex: 0.15;">Remove</button>
+							`;
+							container.appendChild(row);
+						}
+
+						const clearanceForm = document.getElementById('hod-clearance-search-form');
+						const clearanceRoll = document.getElementById('hod-clearance-roll');
+						const clearanceResult = document.getElementById('hod-clearance-result');
+						const escapeHtml = (value) => String(value == null ? '' : value)
+							.replace(/&/g, '&amp;')
+							.replace(/</g, '&lt;')
+							.replace(/>/g, '&gt;')
+							.replace(/"/g, '&quot;')
+							.replace(/'/g, '&#39;');
+						if (clearanceForm && clearanceRoll && clearanceResult) {
+							clearanceForm.addEventListener('submit', async (e) => {
+								e.preventDefault();
+								const rollNumber = clearanceRoll.value.trim();
+								if (!rollNumber) return;
+								clearanceResult.innerHTML = '<p class="muted">Searching...</p>';
+								try {
+									const response = await fetch('/api/student/search-status', {
+										method: 'POST',
+										headers: { 'Content-Type': 'application/json' },
+										body: JSON.stringify({ rollNumber }),
+									});
+									const data = await response.json();
+									if (!response.ok) throw new Error(data.error || 'Unable to fetch status');
+									const student = data.student || {};
+									const mentorInfo = data.mentorInfo || null;
+									const objectiveInfo = data.objectiveInfo || null;
+
+									const subjectsHtml = (data.subjects || []).length
+										? `
+											<table style="margin-top:12px;">
+												<tr>
+													<th>Subject code</th><th>Subject name</th><th>Faculty</th><th>Assignment 1</th><th>Assignment 2</th><th>Remarks</th>
+												</tr>
+												${(data.subjects || []).map((s) => `
+													<tr>
+														<td>${escapeHtml(s.subjectCode || '-')}</td>
+														<td>${escapeHtml(s.subjectName || '-')}</td>
+														<td>${escapeHtml(s.facultyName || '-')}</td>
+														<td>${s.assignment1 ? 'Yes' : 'No'}</td>
+														<td>${s.assignment2 ? 'Yes' : 'No'}</td>
+														<td>${escapeHtml(s.facultyNote || '-')}</td>
+													</tr>
+												`).join('')}
+											</table>`
+										: '<p class="muted">No subject clearance records found.</p>';
+
+									const mentorHtml = mentorInfo
+										? `
+											<div class="card" style="margin-top:12px;">
+												<h3>Mentor status</h3>
+												<p><strong>Mentor:</strong> ${escapeHtml(mentorInfo.mentorName || mentorInfo.mentorFacultyId || '-')}</p>
+												<p><strong>${escapeHtml(mentorInfo.label1 || 'Assignment 1')}:</strong> ${mentorInfo.assignment1 ? 'Approved' : 'Pending'}</p>
+												<p><strong>${escapeHtml(mentorInfo.label2 || 'Assignment 2')}:</strong> ${mentorInfo.assignment2 ? 'Approved' : 'Pending'}</p>
+												<p><strong>Status:</strong> ${escapeHtml(mentorInfo.status || '-')}</p>
+											</div>`
+										: '';
+
+									const objectiveHtml = (objectiveInfo && objectiveInfo.objectives && objectiveInfo.objectives.length)
+										? `
+											<div class="card" style="margin-top:12px;">
+												<h3>Objective approvals</h3>
+												<p><strong>Overall status:</strong> ${escapeHtml(objectiveInfo.status || 'Pending Faculty')}</p>
+												<table style="margin-top:8px;">
+													<tr>
+														<th>Objective</th>
+														<th>Faculty</th>
+														<th>Status</th>
+													</tr>
+													${(objectiveInfo.objectives || []).map((obj) => `
+														<tr>
+															<td>${escapeHtml(obj.name || '-')}</td>
+															<td>${escapeHtml(obj.facultyName || obj.facultyId || '-')}</td>
+															<td>${obj.approved ? 'Approved' : escapeHtml(obj.status || 'Pending Faculty')}</td>
+														</tr>
+													`).join('')}
+												</table>
+											</div>`
+										: '';
+
+									clearanceResult.hidden = false;
+									clearanceResult.innerHTML = `
+										<div class="card">
+											<div class="flex-between">
+												<h3>${escapeHtml(student.name || 'Student')} (${escapeHtml(data.rollNumber || rollNumber)})</h3>
+												<span class="badge">${escapeHtml(student.branch || '-')}</span>
+											</div>
+											<p class="muted" style="margin-top:8px;">Department: ${escapeHtml(student.department || '-')} | Year: ${escapeHtml(student.year || '-')} | Semester: ${escapeHtml(student.semester || '-')}</p>
+											${subjectsHtml}
+											${mentorHtml}
+											${objectiveHtml}
+										</div>`;
+									clearanceResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
+								} catch (err) {
+									clearanceResult.innerHTML = `<div class="alert">${err.message || 'Search failed'}</div>`;
+								}
+							});
+						}
+					</script>
+				</div>
+			</div>
+
+			<div class="panel" data-panel="manage-mentors">
+				<div class="card" id="manage-mentors">
+					<div class="flex-between">
+						<h2>Manage mentors</h2>
+						<span class="badge">Assign</span>
+					</div>
+					<form action="/hod/mentors/assign" method="POST" class="stack">
+						<div class="grid two">
+							<label class="field">
+								<span>Mentor (faculty)</span>
+								<select name="mentorFacultyId" required>
+									<option value="">Select faculty</option>
+									<% faculties.forEach(function(f){ %>
+										<option value="<%= f.facultyId %>"><%= f.name %> (<%= f.facultyId %>)</option>
+									<% }) %>
+								</select>
+							</label>
+							<label class="field">
+								<span>Student roll numbers</span>
+								<textarea name="rollNumbers" rows="2" placeholder="Enter multiple roll numbers separated by commas" required></textarea>
+							</label>
+						</div>
+						<label class="field">
+							<span>Mentor objectives / notes</span>
+							<textarea name="mentorNotes" rows="2" placeholder="Objectives to be tracked by this mentor"></textarea>
+						</label>
+						<button type="submit" class="btn btn-accent">Map mentees</button>
+					</form>
+
+					<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+						<form action="/hod/requests/generate-mentor-subjects" method="POST">
+							<button type="submit" class="btn btn-outline-primary">Create mentor requests</button>
+						</form>
+					</div>
+				</div>
+						<div class="card" style="margin-top:16px;">
+							<div class="flex-between">
+								<h3>Mentor subjects (common for all mentors)</h3>
+								<span class="badge"><%= mentorSubjects && mentorSubjects.length ? mentorSubjects.length : 0 %> total</span>
+							</div>
+							<form action="/hod/mentor-subjects" method="POST" class="stack">
+								<div class="grid two">
+									<label class="field">
+										<span>Name</span>
+										<input type="text" name="name" placeholder="e.g., Student achievements" required />
+									</label>
+								</div>
+								<button type="submit" class="btn btn-accent">Add mentor subject</button>
+							</form>
+
+							<table style="margin-top:12px;">
+								<tr>
+									<th>Name</th>
+									<th>Delete</th>
+								</tr>
+								<% if (mentorSubjects && mentorSubjects.length) { %>
+									<% mentorSubjects.forEach(function(ms){ %>
+									<tr>
+										<td><%= ms.name %></td>
+										<td>
+											<form action="/hod/mentor-subjects/<%= ms._id %>/delete" method="POST" onsubmit="return confirm('Delete this mentor subject?');">
+												<button type="submit" class="btn btn-danger">Delete</button>
+											</form>
+										</td>
+									</tr>
+									<% }) %>
+								<% } else { %>
+									<tr>
+										<td colspan="2" style="text-align:center;">No mentor subjects defined yet.</td>
+									</tr>
+								<% } %>
+							</table>
+						</div>
+			</div>
+
+			<div class="panel" data-panel="manage-objective-approvals">
+				<div class="card" id="manage-objective-approvals">
+					<div class="flex-between">
+						<h2>Objective approvals</h2>
+						<span class="badge"><%= objectiveApprovals && objectiveApprovals.length ? objectiveApprovals.length : 0 %> objectives</span>
+					</div>
+					<p class="muted" style="margin-top:8px;">Create objective approvals like NASSCOM. Each objective is assigned to one faculty, and each student needs one approval for that objective.</p>
+
+					<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+						<form action="/hod/requests/generate-objective-approvals" method="POST">
+							<button type="submit" class="btn btn-outline-primary">Generate objective requests for students</button>
+						</form>
+					</div>
+
+					<form action="/hod/objective-approvals" method="POST" class="stack" style="margin-top:14px;">
+						<div class="grid two">
+							<label class="field">
+								<span>Objective name</span>
+								<input type="text" name="name" placeholder="e.g., NASSCOM" required />
+							</label>
+							<label class="field">
+								<span>Faculty to approve</span>
+								<select name="facultyId" required>
+									<option value="">Select faculty</option>
+									<% faculties.forEach(function(f){ %>
+										<option value="<%= f.facultyId %>"><%= f.name %> (<%= f.facultyId %>)</option>
+									<% }) %>
+								</select>
+							</label>
+						</div>
+
+						<fieldset>
+							<legend style="font-weight:600; margin-bottom:8px;">Applicable years</legend>
+							<p class="muted" style="margin-bottom:8px;">Select years to apply this objective (leave all unchecked for all years).</p>
+							<div style="display:flex;gap:12px;flex-wrap:wrap;">
+								<label><input type="checkbox" name="years" value="II" /> II year</label>
+								<label><input type="checkbox" name="years" value="III" /> III year</label>
+								<label><input type="checkbox" name="years" value="IV" /> IV year</label>
+							</div>
+						</fieldset>
+
+						<button type="submit" class="btn btn-accent">Add objective approval</button>
+					</form>
+
+					<table style="margin-top:14px;">
+						<tr>
+							<th>Objective</th>
+							<th>Faculty</th>
+							<th>Applicable years</th>
+							<th>Delete</th>
+						</tr>
+						<% if (objectiveApprovals && objectiveApprovals.length) { %>
+							<% objectiveApprovals.forEach(function(obj){ const faculty = faculties.find((f) => f.facultyId === obj.facultyId); %>
+							<tr>
+								<td><%= obj.name %></td>
+								<td>
+									<%= faculty ? faculty.name : (obj.facultyId || '-') %>
+									<% if (obj.facultyId) { %><br /><span class="muted">ID: <%= obj.facultyId %></span><% } %>
+								</td>
+								<td><%= (obj.years && obj.years.length) ? obj.years.join(', ') : 'All years' %></td>
+								<td>
+									<form action="/hod/objective-approvals/<%= obj._id %>/delete" method="POST" onsubmit="return confirm('Delete this objective and its requests?');">
+										<button type="submit" class="btn btn-danger">Delete</button>
+									</form>
+								</td>
+							</tr>
+							<% }) %>
+						<% } else { %>
+							<tr>
+								<td colspan="4" style="text-align:center;">No objective approvals created yet.</td>
+							</tr>
+						<% } %>
+					</table>
+				</div>
+			</div>
+
+	</section>
+</div>
+
+	<div class="modal" id="editModal" hidden>
+		<div class="modal-backdrop" data-close></div>
+		<div class="modal-dialog card">
+			<div class="modal-head">
+				<h2>Edit record</h2>
+				<button type="button" class="icon-btn" data-close aria-label="Close">&times;</button>
+			</div>
+			<form id="editForm" method="POST" class="stack">
+				<input type="hidden" name="_method" value="post" />
+						<div class="grid two" id="edit-student-fields" hidden>
+							<label class="field">
+								<span>Roll number</span>
+								<input type="text" name="rollNumber" required />
+							</label>
+							<label class="field">
+								<span>Name</span>
+								<input type="text" name="name" required />
+							</label>
+						</div>
+						<div class="grid two" id="edit-student-extra" hidden>
+							<label class="field">
+								<span>Branch</span>
+								<input type="text" name="branch" />
+							</label>
+							<label class="field">
+								<span>Department</span>
+								<input type="text" name="department" />
+							</label>
+						</div>
+						<div class="grid two" id="edit-student-dept" hidden>
+							<label class="field">
+								<span>Year</span>
+								<input type="text" name="year" />
+							</label>
+							<label class="field">
+								<span>Semester</span>
+								<input type="text" name="semester" />
+							</label>
+						</div>
+						<div class="grid two" id="edit-student-mentor" hidden>
+							<label class="field">
+								<span>Section</span>
+								<input type="text" name="section" />
+							</label>
+							<label class="field">
+								<span>Mentor (faculty ID)</span>
+								<input type="text" name="mentorFacultyId" />
+							</label>
+						</div>
+						<label class="field" id="edit-student-notes" hidden>
+							<span>Mentor notes / objectives</span>
+							<textarea name="mentorNotes" rows="2"></textarea>
+						</label>
+
+				<div id="edit-subject-fields" hidden>
+					<input type="hidden" name="originalBranch" />
+					<div class="grid two">
+						<label class="field">
+							<span>Subject code</span>
+							<input type="text" name="subjectCode" />
+						</label>
+						<label class="field">
+							<span>Subject name</span>
+							<input type="text" name="subjectName" />
+						</label>
+					</div>
+					<div class="grid two">
+						<label class="field">
+							<span>Branch</span>
+							<input type="text" name="branches" placeholder="e.g., CSE" />
+						</label>
+						<label class="field">
+							<span>Default faculty</span>
+							<select name="facultyIds">
+								<option value="">Select faculty</option>
+								<% faculties.forEach(function(f){ %>
+									<option value="<%= f.facultyId %>"><%= f.name %> (<%= f.facultyId %>)</option>
+								<% }) %>
+							</select>
+						</label>
+					</div>
+					<div class="stack" style="margin-top: 8px;">
+						<label class="field" style="margin-bottom: 0;">
+							<span>Section-wise faculty mapping</span>
+						</label>
+						<div id="modalSectionContainer" style="display:flex;flex-direction:column;gap:8px;"></div>
+						<button type="button" id="modalAddSectionBtn" class="btn btn-outline-primary">+ Add section mapping</button>
+					</div>
+					<div class="grid two">
+						<label class="field">
+							<span>Year</span>
+							<select name="year">
+								<option value="II">II</option>
+								<option value="III">III</option>
+							</select>
+						</label>
+						<label class="field">
+							<span>Semester</span>
+							<select name="semester">
+								<option value="I">I</option>
+								<option value="II">II</option>
+							</select>
+						</label>
+					</div>
+				</div>
+
+				<div id="edit-faculty-fields" hidden>
+					<div class="grid two">
+						<label class="field">
+							<span>Name</span>
+							<input type="text" name="name" />
+						</label>
+						<label class="field">
+							<span>Faculty ID</span>
+							<input type="text" name="newFacultyId" />
+						</label>
+					</div>
+					<div class="grid two">
+						<label class="field">
+							<span>Department</span>
+							<select name="department">
+								<option value="CSM">CSM</option>
+								<option value="CSN">CSN</option>
+								<option value="CSE">CSE</option>
+								<option value="ECE">ECE</option>
+								<option value="ME">ME</option>
+								<option value="Civil">Civil</option>
+								<option value="EEE">EEE</option>
+							</select>
+						</label>
+						<label class="field">
+							<span>New password (optional)</span>
+							<input type="password" name="password" />
+						</label>
+					</div>
+				</div>
+
+				<div class="flex-between">
+					<div class="muted" id="edit-context"></div>
+					<div class="flex-between" style="gap: 10px;">
+						<button type="button" class="link-btn" data-close>Cancel</button>
+						<button type="submit" class="btn btn-accent">Save changes</button>
+					</div>
+				</div>
+			</form>
+		</div>
+	</div>
+
+<script>
+(() => {
+	const links = Array.from(document.querySelectorAll('[data-target]'));
+	const panels = Array.from(document.querySelectorAll('[data-panel]'));
+	const activate = (name) => {
+		panels.forEach((p) => p.classList.toggle('active', p.dataset.panel === name));
+		links.forEach((l) => l.classList.toggle('active', l.dataset.target === name));
+	};
+	links.forEach((link) => {
+		link.addEventListener('click', (e) => {
+			e.preventDefault();
+			activate(link.dataset.target);
+			history.replaceState(null, '', `#${link.dataset.target}`);
+		});
+	});
+	const serverInitial = "<%= initialPanel || '' %>";
+	const initial = serverInitial || window.location.hash?.replace('#', '') || links[0]?.dataset.target || 'pending';
+	activate(initial);
+
+	const modal = document.getElementById('editModal');
+	const form = document.getElementById('editForm');
+	const contextEl = document.getElementById('edit-context');
+	const studentFields = document.getElementById('edit-student-fields');
+	const studentExtra = document.getElementById('edit-student-extra');
+	const studentDept = document.getElementById('edit-student-dept');
+	const studentMentor = document.getElementById('edit-student-mentor');
+	const studentNotes = document.getElementById('edit-student-notes');
+	const facultyFields = document.getElementById('edit-faculty-fields');
+	const subjectFields = document.getElementById('edit-subject-fields');
+	const modalSectionContainer = document.getElementById('modalSectionContainer');
+	const modalAddSectionBtn = document.getElementById('modalAddSectionBtn');
+	const facultiesData = <%- JSON.stringify(faculties || []) %>;
+
+	const disableGroup = (els, isVisible) => {
+		els.forEach((el) => {
+			el.hidden = !isVisible;
+			el.style.display = isVisible ? '' : 'none';
+			el.querySelectorAll('input, select, textarea').forEach((input) => {
+				input.disabled = !isVisible;
+			});
+		});
+	};
+
+	const studentGroup = [studentFields, studentExtra, studentDept, studentMentor, studentNotes];
+	const facultyGroup = [facultyFields];
+	const subjectGroup = [subjectFields];
+
+	const createModalSectionRow = (sectionValue = '', facultyIdValue = '') => {
+		const row = document.createElement('div');
+		row.style.display = 'flex';
+		row.style.gap = '8px';
+		row.style.alignItems = 'center';
+		row.innerHTML = `
+			<input type="text" name="sectionNames" placeholder="Section (A/B/C)" style="flex: 0.35;" />
+			<select name="sectionFacultyIds" style="flex: 1;">
+				<option value="">Select faculty</option>
+			</select>
+			<button type="button" class="btn btn-danger btn-sm">Remove</button>
+		`;
+
+		const sectionInput = row.querySelector('input[name="sectionNames"]');
+		const facultySelect = row.querySelector('select[name="sectionFacultyIds"]');
+		const removeBtn = row.querySelector('button');
+
+		sectionInput.value = sectionValue || '';
+		facultiesData.forEach((f) => {
+			const opt = document.createElement('option');
+			opt.value = f.facultyId;
+			opt.textContent = `${f.name} (${f.facultyId})`;
+			facultySelect.appendChild(opt);
+		});
+		facultySelect.value = facultyIdValue || '';
+		removeBtn.addEventListener('click', () => row.remove());
+
+		return row;
+	};
+
+	if (modalAddSectionBtn) {
+		modalAddSectionBtn.addEventListener('click', (e) => {
+			e.preventDefault();
+			if (!modalSectionContainer) return;
+			modalSectionContainer.appendChild(createModalSectionRow());
+		});
+	}
+
+	const toggleModal = (show) => {
+		if (!modal) return;
+		modal.toggleAttribute('hidden', !show);
+		document.body.classList.toggle('modal-open', show);
+	};
+
+	const closeEls = modal?.querySelectorAll('[data-close]') || [];
+	closeEls.forEach((el) => el.addEventListener('click', () => toggleModal(false)));
+	modal?.addEventListener('click', (e) => { if (e.target === modal) toggleModal(false); });
+	document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleModal(false); });
+
+	// default to hidden and disabled
+	disableGroup(studentGroup, false);
+	disableGroup(facultyGroup, false);
+	disableGroup(subjectGroup, false);
+
+	const editButtons = Array.from(document.querySelectorAll('.edit-btn'));
+	editButtons.forEach((btn) => {
+		btn.addEventListener('click', () => {
+			const type = btn.dataset.type;
+			if (type === 'student') {
+				const { id, name, branch, department, year, semester, section, mentor, notes } = btn.dataset;
+				form.action = `/hod/students/${encodeURIComponent(id)}/update`;
+				studentFields.querySelector('[name="rollNumber"]').value = id;
+				studentFields.querySelector('[name="name"]').value = name || '';
+				studentExtra.querySelector('[name="branch"]').value = branch || '';
+				studentExtra.querySelector('[name="department"]').value = department || '';
+				studentDept.querySelector('[name="year"]').value = year || '';
+				studentDept.querySelector('[name="semester"]').value = semester || '';
+				studentMentor.querySelector('[name="section"]').value = section || '';
+				studentMentor.querySelector('[name="mentorFacultyId"]').value = mentor || '';
+				studentNotes.querySelector('[name="mentorNotes"]').value = notes || '';
+				disableGroup(studentGroup, true);
+				disableGroup(facultyGroup, false);
+				disableGroup(subjectGroup, false);
+				contextEl.textContent = `Editing student ${id}`;
+			} else if (type === 'faculty') {
+				const { id, name, department } = btn.dataset;
+				form.action = `/hod/faculty/${encodeURIComponent(id)}/update`;
+				facultyFields.querySelector('[name="name"]').value = name;
+				facultyFields.querySelector('[name="newFacultyId"]').value = id;
+				facultyFields.querySelector('[name="department"]').value = department;
+				facultyFields.querySelector('[name="password"]').value = '';
+				disableGroup(studentGroup, false);
+				disableGroup(facultyGroup, true);
+				disableGroup(subjectGroup, false);
+				contextEl.textContent = `Editing faculty ${id}`;
+			} else if (type === 'subject') {
+				const { code, name, year, semester, branch, facultyId, sectionFaculty } = btn.dataset;
+				form.action = `/hod/subjects/${encodeURIComponent(code)}/update`;
+				subjectFields.querySelector('[name="subjectCode"]').value = code;
+				subjectFields.querySelector('[name="subjectName"]').value = name;
+				subjectFields.querySelector('[name="year"]').value = year;
+				subjectFields.querySelector('[name="semester"]').value = semester;
+				subjectFields.querySelector('[name="branches"]').value = branch || '';
+				subjectFields.querySelector('[name="originalBranch"]').value = branch || '';
+				subjectFields.querySelector('[name="facultyIds"]').value = facultyId || '';
+
+				if (modalSectionContainer) {
+					modalSectionContainer.innerHTML = '';
+					let mappings = [];
+					try {
+						mappings = JSON.parse(decodeURIComponent(sectionFaculty || '%5B%5D'));
+					} catch (err) {
+						mappings = [];
+					}
+
+					if (Array.isArray(mappings) && mappings.length) {
+						mappings.forEach((sf) => {
+							modalSectionContainer.appendChild(createModalSectionRow(sf.section || '', sf.facultyId || ''));
+						});
+					} else {
+						modalSectionContainer.appendChild(createModalSectionRow());
+					}
+				}
+				disableGroup(studentGroup, false);
+				disableGroup(facultyGroup, false);
+				disableGroup(subjectGroup, true);
+				contextEl.textContent = `Editing subject ${code}`;
+			}
+			toggleModal(true);
+		});
+	});
+
+	// Department-wise student filter in "Students by department" subsection
+	const deptChips = Array.from(document.querySelectorAll('.dept-chip'));
+	const deptRows = Array.from(document.querySelectorAll('#dept-students-table tbody tr'));
+	const filterDept = (dept) => {
+		deptRows.forEach((row) => {
+			const rowDept = row.dataset.dept || '';
+			row.style.display = !dept || dept === '__all' || rowDept === dept ? '' : 'none';
+		});
+	};
+	if (deptChips.length && deptRows.length) {
+		deptChips.forEach((chip) => {
+			chip.addEventListener('click', () => {
+				const dept = chip.dataset.dept;
+				deptChips.forEach((c) => c.classList.toggle('active', c === chip));
+				filterDept(dept);
+			});
+		});
+		filterDept('__all');
+	}
+
+	// Helper function to show toast notification
+	const showToast = (message, duration = 2000) => {
+		const toast = document.createElement('div');
+		toast.style.cssText = `
+			position: fixed;
+			bottom: 20px;
+			right: 20px;
+			background: #10b981;
+			color: white;
+			padding: 12px 20px;
+			border-radius: 6px;
+			font-size: 14px;
+			z-index: 9999;
+			box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+		`;
+		toast.textContent = message;
+		document.body.appendChild(toast);
+		setTimeout(() => toast.remove(), duration);
+	};
+
+	// AUTO-SAVE: Submit checkbox changes automatically via AJAX (Bulk assignments)
+	const bulkForm = document.querySelector('form[action="/faculty/requests/bulk-assignments"]');
+	if (bulkForm) {
+		const checkboxes = bulkForm.querySelectorAll('input[type="checkbox"]');
+		const textInputs = bulkForm.querySelectorAll('input[type="text"][name*="facultyNote"]');
+		
+		const autoSubmitForm = async () => {
+			// Collect form data manually
+			const assignments = {};
+			const subjectCodeField = bulkForm.querySelector('input[name="subjectCode"]');
+			const subjectCode = subjectCodeField?.value || '';
+			
+			// Get all checkbox groups
+			bulkForm.querySelectorAll('input[type="checkbox"], input[type="text"][name*="facultyNote"]').forEach((input) => {
+				const nameAttr = input.getAttribute('name');
+				if (!nameAttr) return;
+				
+				// Parse assignments[id][fieldName] format
+				const match = nameAttr.match(/assignments\[([^\]]+)\]\[([^\]]+)\]/);
+				if (!match) return;
+				
+				const [, id, fieldName] = match;
+				if (!assignments[id]) {
+					assignments[id] = {};
+				}
+				
+				if (input.type === 'checkbox') {
+					assignments[id][fieldName] = input.checked;
+				} else if (input.type === 'text') {
+					assignments[id][fieldName] = input.value;
+				}
+			});
+			
+			try {
+				const response = await fetch('/faculty/requests/bulk-assignments', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify({ assignments, subjectCode }),
+				});
+				
+				if (response.ok) {
+					showToast('✓ Saved successfully');
+				} else {
+					showToast('⚠ Save failed', 2000);
+				}
+			} catch (err) {
+				console.error('Auto-save failed:', err);
+				showToast('✗ Network error', 2000);
+			}
+		};
+		
+		// Debounce function to avoid too many requests
+		let saveTimeout;
+		const debouncedSave = () => {
+			clearTimeout(saveTimeout);
+			saveTimeout = setTimeout(autoSubmitForm, 500);
+		};
+		
+		// Add listeners to all checkboxes
+		checkboxes.forEach((checkbox) => {
+			checkbox.addEventListener('change', debouncedSave);
+		});
+		
+		// Also auto-save when remarks text changes
+		textInputs.forEach((input) => {
+			input.addEventListener('change', debouncedSave);
+		});
+	}
+})();
+</script>
+
+<%- include('partials/footer') %>

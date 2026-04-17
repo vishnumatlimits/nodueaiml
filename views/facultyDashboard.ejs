@@ -1,0 +1,599 @@
+<% const pageTitle = 'Faculty Dashboard'; %>
+<%- include('partials/header', { title: pageTitle }) %>
+
+<div class="layout-wrap">
+    <aside class="sidebar">
+        <h2>Faculty</h2>
+        <a href="#pending" data-target="pending" class="active">Pending approvals</a>
+        <a href="#student-data" data-target="student-data">Subject-wise approvals</a>
+        <a href="#mentor-subject-data" data-target="mentor-subject-data">Mentor approvals</a>
+        <a href="#objective-data" data-target="objective-data">Objective approvals</a>
+        <a href="#mentee-data" data-target="mentee-data">Mentees data</a>
+        <a href="#profile" data-target="profile">Profile</a>
+                <% if (subjectGroups && subjectGroups.length) { %>
+                    <h2 style="margin-top:16px;font-size:0.9rem;opacity:0.85;">Your subjects</h2>
+                    <% subjectGroups.forEach(function(group){ %>
+                        <a href="#student-data" data-target="student-data" data-subject="<%= group.subjectCode %>">
+                            <%= group.subjectCode %>
+                        </a>
+                    <% }); %>
+                <% } %>
+        <form action="/logout" method="POST">
+            <button type="submit" class="link-btn logout">Logout</button>
+        </form>
+    </aside>
+
+    <section class="content stack">
+        <div class="panel active" data-panel="pending">
+            <div class="flex-between">
+                <h1 id="pending">Pending approvals</h1>
+                <span class="badge"><%= pending.length %> waiting</span>
+            </div>
+
+            <div class="card">
+                <% if (!pending.length) { %>
+                <p class="muted">No requests need your review.</p>
+                <% } else { %>
+                <table>
+                    <tr>
+                        <th>Student</th>
+                        <th>Department</th>
+                        <th>Reason</th>
+                        <th>Actions</th>
+                    </tr>
+                    <% pending.forEach((r) => { %>
+                    <tr>
+                        <td><%= r.studentName %></td>
+                        <td><%= r.department %></td>
+                        <td><%= r.reason %></td>
+                        <td>
+                            <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
+                                <button type="submit" class="btn btn-accent">Approve</button>
+                            </form>
+                            <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
+                                <button type="submit" class="btn btn-outline-primary">Deny</button>
+                            </form>
+                        </td>
+                    </tr>
+                    <% }); %>
+                </table>
+                <% } %>
+            </div>
+        </div>
+
+        <div class="panel" data-panel="student-data">
+            <div class="card">
+                <div class="flex-between">
+                    <h2 id="student-data">Subject wise Faculty Approval Information</h2>
+                    <span class="badge"><%= subjectGroups && subjectGroups.length ? subjectGroups.length + ' subjects' : 'No subjects' %></span>
+                </div>
+
+                <% if (!subjectGroups || !subjectGroups.length) { %>
+                    <p class="muted">No subject-wise approvals available yet.</p>
+                <% } else { %>
+                    <form action="/faculty/requests/bulk-assignments" method="POST">
+                        <input type="hidden" name="subjectCode" id="bulk-subject-code" value="" />
+                        <% subjectGroups.forEach(function(group){ %>
+                            <div class="card subject-group-card" data-subject="<%= group.subjectCode %>" style="margin-top:16px;">
+                                <h3><%= group.subjectName %> <small style="font-weight:400;color:#6b7280;">(<%= group.subjectCode || 'Code N/A' %>)</small></h3>
+                                <table>
+                                    <tr>
+                                        <th>S.No</th>
+                                        <th>Roll Number</th>
+                                        <th>Subject</th>
+                                        <th>Assignment 1</th>
+                                        <th>Assignment 2</th>
+                                        <th>Remarks</th>
+                                    </tr>
+                                    <% group.rows.forEach(function(r, idx){ %>
+                                        <tr>
+                                            <td><%= idx + 1 %></td>
+                                            <td><%= r.rollNumber || '-' %></td>
+                                            <td><%= r.subjectName || group.subjectName %></td>
+                                            <td style="text-align:center;">
+                                                <input type="checkbox" name="assignments[<%= r.id %>][assignment1]" <%= r.assignment1 ? 'checked' : '' %> />
+                                            </td>
+                                            <td style="text-align:center;">
+                                                <input type="checkbox" name="assignments[<%= r.id %>][assignment2]" <%= r.assignment2 ? 'checked' : '' %> />
+                                            </td>
+                                            <td>
+                                                <input
+                                                    type="text"
+                                                    name="assignments[<%= r.id %>][facultyNote]"
+                                                    value="<%= r.facultyNote || '' %>"
+                                                    placeholder="Remarks"
+                                                    style="width:100%;max-width:260px;"
+                                                />
+                                            </td>
+                                        </tr>
+                                    <% }); %>
+                                </table>
+                            </div>
+                        <% }); %>
+                        <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center;">
+                            <p style="color:#6b7280;font-size:0.9rem;margin:0;"><em>Auto-saves on each change</em></p>
+                            <button type="submit" class="btn btn-accent">Save all (Manual backup)</button>
+                        </div>
+                    </form>
+                <% } %>
+            </div>
+        </div>
+
+        <div class="panel" data-panel="mentor-subject-data">
+            <div class="card">
+                <div class="flex-between">
+                    <h2 id="mentor-subject-data">Mentor subject approvals</h2>
+                    <span class="badge"><%= mentorSubjectRequests && mentorSubjectRequests.length ? mentorSubjectRequests.length + ' requests' : 'No mentor requests' %></span>
+                </div>
+
+                <% if (!mentorSubjectRequests || !mentorSubjectRequests.length) { %>
+                    <p class="muted">No mentor subject requests pending for your mentees.</p>
+                <% } else { %>
+                    <table>
+                        <tr>
+                            <th>Student</th>
+                            <th>Roll number</th>
+                            <th>Mentor subject</th>
+                            <th>Branch / Year</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                        <% mentorSubjectRequests.forEach(function(r){ %>
+                        <tr>
+                            <td><%= r.studentName || '-' %></td>
+                            <td><%= r.rollNumber || '-' %></td>
+                            <td><%= r.subjectName || r.reason || '-' %></td>
+                            <td>
+                                <%= r.branch || '-' %>
+                                <% if (r.year) { %> • Year <%= r.year %><% } %>
+                                <% if (r.semester) { %> • Sem <%= r.semester %><% } %>
+                            </td>
+                            <td><%= r.status || '-' %></td>
+                            <td>
+                                <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
+                                    <button type="submit" class="btn btn-accent">Approve</button>
+                                </form>
+                                <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
+                                    <button type="submit" class="btn btn-outline-primary">Deny</button>
+                                </form>
+                            </td>
+                        </tr>
+                        <% }); %>
+                    </table>
+                <% } %>
+            </div>
+        </div>
+
+        <div class="panel" data-panel="objective-data">
+            <div class="card">
+                <div class="flex-between">
+                    <h2 id="objective-data">Objective approvals</h2>
+                    <span class="badge"><%= objectiveRequests && objectiveRequests.length ? objectiveRequests.length + ' requests' : 'No objective requests' %></span>
+                </div>
+
+                <% if (!objectiveRequests || !objectiveRequests.length) { %>
+                    <p class="muted">No objective approvals are assigned to you right now.</p>
+                <% } else { %>
+                    <table>
+                        <tr>
+                            <th>Student</th>
+                            <th>Roll number</th>
+                            <th>Objective</th>
+                            <th>Branch / Year</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                        <% objectiveRequests.forEach(function(r){ %>
+                        <tr>
+                            <td><%= r.studentName || '-' %></td>
+                            <td><%= r.rollNumber || '-' %></td>
+                            <td><%= r.subjectName || r.reason || '-' %></td>
+                            <td>
+                                <%= r.branch || '-' %>
+                                <% if (r.year) { %> • Year <%= r.year %><% } %>
+                                <% if (r.semester) { %> • Sem <%= r.semester %><% } %>
+                            </td>
+                            <td><%= r.status || '-' %></td>
+                            <td>
+                                <% if (r.status === 'Pending Faculty') { %>
+                                    <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
+                                        <input type="hidden" name="redirectPanel" value="objective-data" />
+                                        <button type="submit" class="btn btn-accent">Approve</button>
+                                    </form>
+                                    <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
+                                        <input type="hidden" name="redirectPanel" value="objective-data" />
+                                        <button type="submit" class="btn btn-outline-primary">Deny</button>
+                                    </form>
+                                <% } else { %>
+                                    <span class="muted">-</span>
+                                <% } %>
+                            </td>
+                        </tr>
+                        <% }); %>
+                    </table>
+                <% } %>
+            </div>
+        </div>
+
+        <div class="panel" data-panel="mentee-data">
+            <div class="card">
+                <div class="flex-between">
+                    <h2 id="mentee-data">Assigned mentees</h2>
+                    <span class="badge"><%= assignedMentees && assignedMentees.length ? assignedMentees.length + ' mentees' : 'No mentees' %></span>
+                </div>
+                <% if (assignedMentees && assignedMentees.length) { %>
+                <table style="margin-top:12px;">
+                    <tr>
+                        <th>Name</th>
+                        <th>Roll number</th>
+                        <th>Branch / Year</th>
+                        <th>Department</th>
+                        <th>Section</th>
+                        <th>Mentor notes</th>
+                    </tr>
+                    <% assignedMentees.forEach(function(s){ %>
+                    <tr>
+                        <td><%= s.name || '-' %></td>
+                        <td><%= s.rollNumber || '-' %></td>
+                        <td>
+                            <%= s.branch || '-' %>
+                            <% if (s.year) { %> • Year <%= s.year %><% } %>
+                            <% if (s.semester) { %> • Sem <%= s.semester %><% } %>
+                        </td>
+                        <td><%= s.department || '-' %></td>
+                        <td><%= s.section || '-' %></td>
+                        <td><%= s.mentorNotes || '-' %></td>
+                    </tr>
+                    <% }); %>
+                </table>
+                <% } else { %>
+                <p class="muted">No mentees are mapped to your faculty ID yet.</p>
+                <% } %>
+
+                <div style="margin-top:18px;" class="flex-between">
+                    <h3 style="margin:0;">Mentor approvals</h3>
+                    <span class="badge"><%= mentorSubjectRequests && mentorSubjectRequests.length ? mentorSubjectRequests.length + ' requests' : 'No mentor requests' %></span>
+                </div>
+
+                <% if (!mentorSubjectRequests || !mentorSubjectRequests.length) { %>
+                <p class="muted">No mentor requests pending for your mentees.</p>
+                <% } else { %>
+                <% const menteeDepts = []; mentorSubjectRequests.forEach(function(r){ if (r.department && !menteeDepts.includes(r.department)) menteeDepts.push(r.department); }); %>
+                <div style="margin:8px 0; display:flex; flex-wrap:wrap; gap:8px;">
+					<button type="button" class="btn btn-outline-primary mentee-dept-chip active" data-dept="__all">All</button>
+					<% menteeDepts.forEach(function(d){ %>
+						<button type="button" class="btn btn-outline-primary mentee-dept-chip" data-dept="<%= d %>"><%= d %></button>
+					<% }); %>
+				</div>
+                <table id="mentee-table">
+                    <tr>
+                        <th>Name</th>
+                        <th>Roll number</th>
+                        <th>Branch / Year</th>
+                        <th>Department</th>
+                        <th>Mentor subject</th>
+                        <th>Status</th>
+                    </tr>
+                    <% mentorSubjectRequests.forEach((r) => { %>
+                    <tr data-dept="<%= r.department || '' %>">
+                        <td><%= r.studentName %></td>
+                        <td><%= r.rollNumber %></td>
+                        <td>
+                            <%= r.branch || '-' %>
+                            <% if (r.year) { %> • Year <%= r.year %><% } %>
+                            <% if (r.semester) { %> • Sem <%= r.semester %><% } %>
+                        </td>
+                        <td><%= r.department || '-' %></td>
+                        <td><%= r.subjectName || r.reason || '-' %></td>
+                        <td>
+                            <%= r.status || '-' %>
+                            <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
+                                <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
+                                    <button type="submit" class="btn btn-accent btn-sm">Approve</button>
+                                </form>
+                                <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
+                                    <button type="submit" class="btn btn-outline-primary btn-sm">Deny</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    <% }); %>
+                </table>
+                <% } %>
+            </div>
+        </div>
+
+        <div class="panel" data-panel="profile">
+            <div class="card" id="profile">
+                <div class="flex-between">
+                    <h2>Profile</h2>
+                    <span class="badge">Update your info</span>
+                </div>
+
+                <% if (profileError) { %>
+                  <div class="alert"><%= profileError %></div>
+                <% } %>
+                <% if (profileSuccess) { %>
+                  <div class="alert success"><%= profileSuccess %></div>
+                <% } %>
+
+                <form action="/faculty/profile" method="POST" class="stack">
+                    <label class="field">
+                        <span>Name</span>
+                        <input type="text" name="name" value="<%= self?.name || '' %>" placeholder="Enter name" />
+                    </label>
+                    <label class="field">
+                        <span>Faculty ID</span>
+                        <input type="text" name="facultyId" value="<%= self?.facultyId || '' %>" placeholder="Enter faculty ID" />
+                    </label>
+                    <label class="field">
+                        <span>New password</span>
+                        <input type="password" name="password" placeholder="Leave blank to keep current" />
+                    </label>
+                    <p class="muted">Change any field and submit. Password updates are stored securely.</p>
+                    <button type="submit" class="btn btn-accent">Save changes</button>
+                </form>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script>
+(() => {
+    const links = document.querySelectorAll('.sidebar a[data-target]');
+    const panels = document.querySelectorAll('.panel');
+    const bulkSubjectInput = document.getElementById('bulk-subject-code');
+    let currentSubject = null;
+
+    const filterSubject = (subjectCode) => {
+        const cards = document.querySelectorAll('.subject-group-card');
+        if (!cards.length) return;
+
+        if (!subjectCode) {
+            cards.forEach((c) => {
+                c.style.display = '';
+            });
+            return;
+        }
+
+        cards.forEach((c) => {
+            const code = c.getAttribute('data-subject');
+            c.style.display = code === subjectCode ? '' : 'none';
+        });
+    };
+
+    const activate = (target, activeLink = null) => {
+        panels.forEach((p) => p.classList.toggle('active', p.dataset.panel === target));
+
+        // Only highlight the clicked link (or a chosen default),
+        // instead of marking all links with the same data-target as active.
+        links.forEach((l) => {
+            const shouldBeActive = activeLink
+                ? l === activeLink
+                : (l.dataset.target === target && !l.dataset.subject);
+            l.classList.toggle('active', shouldBeActive);
+        });
+        if (target === 'student-data') {
+            // When hitting main "Subject-wise approvals" link, show all subjects
+            const subject = activeLink && activeLink.getAttribute('data-subject');
+            currentSubject = subject || null;
+            if (bulkSubjectInput) {
+                bulkSubjectInput.value = currentSubject || '';
+            }
+            filterSubject(currentSubject);
+        }
+  };
+
+  links.forEach((link) => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+            const target = link.dataset.target;
+            const subject = link.getAttribute('data-subject');
+                        activate(target, link);
+            if (target === 'student-data') {
+                filterSubject(subject || null);
+            }
+    });
+  });
+
+    // Department-wise mentee filter in "Mentees data" panel
+    const menteeDeptChips = Array.from(document.querySelectorAll('.mentee-dept-chip'));
+    const menteeRows = Array.from(document.querySelectorAll('#mentee-table tbody tr'));
+    const filterMenteeDept = (dept) => {
+        menteeRows.forEach((row) => {
+            const rowDept = row.dataset.dept || '';
+            row.style.display = !dept || dept === '__all' || rowDept === dept ? '' : 'none';
+        });
+    };
+    if (menteeDeptChips.length && menteeRows.length) {
+        menteeDeptChips.forEach((chip) => {
+            chip.addEventListener('click', () => {
+                const dept = chip.dataset.dept;
+                menteeDeptChips.forEach((c) => c.classList.toggle('active', c === chip));
+                filterMenteeDept(dept);
+            });
+        });
+        filterMenteeDept('__all');
+    }
+
+    // On initial load, respect URL hash (e.g. /faculty#student-data)
+    const hash = window.location.hash ? window.location.hash.substring(1) : '';
+    const queryParams = new URLSearchParams(window.location.search);
+    const querySubject = (queryParams.get('subject') || '').trim() || null;
+    if (hash) {
+        // Explicit subject from query should take priority when opening student-data
+        if (hash === 'student-data' && querySubject) {
+            const subjectLink = Array.from(links).find(
+                (l) => l.dataset.target === 'student-data' && l.getAttribute('data-subject') === querySubject,
+            );
+            if (subjectLink) {
+                activate('student-data', subjectLink);
+                filterSubject(querySubject);
+                return;
+            }
+            // If there is no dedicated link, still keep subject filter.
+            const generalStudentLink = Array.from(links).find(
+                (l) => l.dataset.target === 'student-data' && !l.getAttribute('data-subject'),
+            );
+            activate('student-data', generalStudentLink || null);
+            currentSubject = querySubject;
+            if (bulkSubjectInput) {
+                bulkSubjectInput.value = currentSubject;
+            }
+            filterSubject(currentSubject);
+            return;
+        }
+
+        // Try to find a matching sidebar link for this hash
+        const match = Array.from(links).find((l) => l.getAttribute('href') === `#${hash}`);
+        if (match) {
+            const target = match.dataset.target || hash;
+            const subject = match.getAttribute('data-subject');
+            activate(target, match);
+            if (target === 'student-data') {
+                filterSubject(subject || null);
+            }
+            return;
+        }
+        // Fallback: activate panel by hash name directly if present
+        const panelExists = Array.from(panels).some((p) => p.dataset.panel === hash);
+        if (panelExists) {
+            activate(hash);
+            return;
+        }
+    }
+
+    // Default view when no hash: pending approvals
+    activate('pending');
+
+    // Helper function to show toast notification
+    const showToast = (message, duration = 2000) => {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #10b981;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            z-index: 9999;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        `;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), duration);
+    };
+
+    // AUTO-SAVE: Submit checkbox changes automatically via AJAX (Bulk assignments)
+    const bulkForm = document.querySelector('form[action="/faculty/requests/bulk-assignments"]');
+    if (bulkForm) {
+        const checkboxes = bulkForm.querySelectorAll('input[type="checkbox"]');
+        const textInputs = bulkForm.querySelectorAll('input[type="text"][name*="facultyNote"]');
+        
+        const autoSubmitForm = async () => {
+            // Collect form data manually
+            const assignments = {};
+            const subjectCodeField = bulkForm.querySelector('input[name="subjectCode"]');
+            const subjectCode = subjectCodeField?.value || '';
+            
+            // Get all checkbox groups
+            bulkForm.querySelectorAll('input[type="checkbox"], input[type="text"][name*="facultyNote"]').forEach((input) => {
+                const nameAttr = input.getAttribute('name');
+                if (!nameAttr) return;
+                
+                // Parse assignments[id][fieldName] format
+                const match = nameAttr.match(/assignments\[([^\]]+)\]\[([^\]]+)\]/);
+                if (!match) return;
+                
+                const [, id, fieldName] = match;
+                if (!assignments[id]) {
+                    assignments[id] = {};
+                }
+                
+                if (input.type === 'checkbox') {
+                    assignments[id][fieldName] = input.checked;
+                } else if (input.type === 'text') {
+                    assignments[id][fieldName] = input.value;
+                }
+            });
+            
+            try {
+                const response = await fetch('/faculty/requests/bulk-assignments', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ assignments, subjectCode }),
+                });
+                
+                if (response.ok) {
+                    showToast('✓ Saved successfully');
+                } else {
+                    showToast('⚠ Save failed', 2000);
+                }
+            } catch (err) {
+                console.error('Auto-save failed:', err);
+                showToast('✗ Network error', 2000);
+            }
+        };
+        
+        // Debounce function to avoid too many requests
+        let saveTimeout;
+        const debouncedSave = () => {
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(autoSubmitForm, 500);
+        };
+        
+        // Add listeners to all checkboxes
+        checkboxes.forEach((checkbox) => {
+            checkbox.addEventListener('change', debouncedSave);
+        });
+        
+        // Also auto-save when remarks text changes
+        textInputs.forEach((input) => {
+            input.addEventListener('change', debouncedSave);
+        });
+    }
+
+    // AUTO-SAVE: Submit checkbox changes for individual mentee forms
+    const menteeForms = document.querySelectorAll('form[action*="/faculty/requests/"][action*="/assignments"]');
+    menteeForms.forEach((form) => {
+        const checkboxes = form.querySelectorAll('input[type="checkbox"]');
+        
+        if (checkboxes.length > 0) {
+            let saveTimeout;
+            
+            const autoSubmitMenteeForm = async () => {
+                const formData = new FormData(form);
+                const action = form.getAttribute('action');
+                
+                try {
+                    const response = await fetch(action, {
+                        method: 'POST',
+                        body: formData,
+                    });
+                    
+                    if (response.ok) {
+                        showToast('✓ Mentee data saved');
+                    }
+                } catch (err) {
+                    console.error('Mentee auto-save failed:', err);
+                }
+            };
+            
+            const debouncedSave = () => {
+                clearTimeout(saveTimeout);
+                saveTimeout = setTimeout(autoSubmitMenteeForm, 500);
+            };
+            
+            checkboxes.forEach((checkbox) => {
+                checkbox.addEventListener('change', debouncedSave);
+            });
+        }
+    });
+})();
+</script>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,40 @@
+<% const pageTitle = 'Student Dashboard'; %>
+<%- include('partials/header', { title: pageTitle }) %>
+<section class="grid two">
+  <div class="card">
+    <h1>Request No-Due</h1>
+    <% if (typeof error !== 'undefined' && error) { %>
+    <div class="alert"><%= error %></div>
+    <% } %>
+    <form method="POST" action="/student/requests" class="stack">
+      <label class="field">
+        <span>Department</span>
+        <input name="department" type="text" placeholder="CSE" required />
+      </label>
+      <label class="field">
+        <span>Reason / Dues description</span>
+        <textarea name="reason" rows="3" placeholder="Outstanding library books" required></textarea>
+      </label>
+      <button type="submit" class="btn btn-accent">Submit request</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Your requests</h2>
+    <% if (!requests.length) { %>
+    <p class="muted">No requests yet.</p>
+    <% } %>
+    <ul class="list">
+      <% requests.forEach(function(req){ %>
+      <li class="list-item">
+        <div>
+          <div class="pill <%= req.status.replace(/\s+/g,'-').toLowerCase() %>"><%= req.status %></div>
+          <div class="muted"><%= req.department %> • <%= req.reason %></div>
+        </div>
+        <div class="muted"><%= req.createdAt.toLocaleDateString() %></div>
+      </li>
+      <% }) %>
+    </ul>
+  </div>
+</section>
+<%- include('partials/footer') %>

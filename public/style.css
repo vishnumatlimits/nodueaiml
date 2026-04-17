@@ -1,0 +1,669 @@
+/* =========================================
+   1. IMPORTS & VARIABLES
+   ========================================= */
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap');
+
+:root {
+    /* --- Palette: Navy & Gold (Classic & Professional) --- */
+    --primary:       #0D1B2A; /* Deep Navy */
+    --primary-hover: #1B263B; /* Lighter Navy */
+    --primary-light: #415A77; /* Soft Navy */
+
+    --accent:        #C5A059; /* Classic Gold */
+    --accent-hover:  #D4AF37; /* Bright Gold */
+
+    --bg-body:       #F4F4F9; /* Professional Off-White */
+    --bg-surface:    #FFFFFF;
+    --bg-sidebar:    #0D1B2A; /* Deep Navy Sidebar */
+
+    --text-main:     #1E222A; /* Dark charcoal */
+    --text-muted:    #5A6270; /* Slate grey */
+    --text-light:    #DCE2E9; /* Light slate/white */
+
+    --border:        #DCE2E9; /* Soft border */
+    --border-focus:  #C5A059; /* Gold focus */
+
+    /* --- Status Colors (Muted for professional look) --- */
+    --success:       #2D6A4F;
+    --success-bg:    #E8F5E9;
+    --danger:        #9B2226;
+    --danger-bg:     #FDECEA;
+    --warning:       #B87333; /* Copper/Bronze warning */
+    --warning-bg:    #FFF3E0;
+
+    /* --- Metrics --- */
+    --topbar-height: 80px;
+    --radius-lg:     8px; /* Less rounded for classic look */
+    --radius-md:     4px;
+    --radius-sm:     2px;
+    --shadow-sm:     0 2px 4px 0 rgba(13, 27, 42, 0.05);
+    --shadow-md:     0 8px 16px rgba(13, 27, 42, 0.08);
+    --shadow-lg:     0 16px 32px rgba(13, 27, 42, 0.12);
+    
+    --font-heading:  'Playfair Display', serif;
+    --font-body:     'Montserrat', sans-serif;
+    --font-family:   var(--font-body);
+
+    /* --- Legacy Mapping (for compatibility) --- */
+    --panel:         var(--bg-surface);
+    --text:          var(--text-main);
+    --muted:         var(--text-muted);
+}
+
+/* =========================================
+   2. RESET & BASE
+   ========================================= */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--bg-body);
+    color: var(--text-main);
+    font-family: var(--font-family);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6;
+}
+
+a {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.3s ease;
+}
+
+a:hover {
+    color: var(--primary);
+}
+
+/* Typography styling */
+h1, h2, h3, h4, h5 {
+    color: var(--primary);
+    margin: 0 0 16px;
+    font-family: var(--font-heading);
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+h1 { font-size: 2.25rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.75rem; }
+h3 { font-size: 1.35rem; }
+
+.muted { color: var(--text-muted); }
+
+/* =========================================
+   3. LAYOUT & NAVIGATION
+   ========================================= */
+
+/* Top Navigation Bar */
+.topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    height: var(--topbar-height);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 40px;
+    background: var(--bg-surface);
+    border-bottom: 2px solid var(--accent);
+    box-shadow: var(--shadow-sm);
+}
+
+.brand {
+    font-family: var(--font-heading);
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--primary);
+    letter-spacing: 0.02em;
+}
+
+.user-meta {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+/* Layout Wrapper */
+.layout-wrap {
+    display: flex;
+    flex: 1;
+    position: relative;
+    width: 100%;
+    margin: 0;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 280px;
+    background: var(--bg-sidebar);
+    color: var(--text-light);
+    display: flex;
+    flex-direction: column;
+    padding: 32px 16px;
+    flex-shrink: 0;
+    position: sticky;
+    top: var(--topbar-height);
+    z-index: 40;
+    border-right: 1px solid var(--primary-hover);
+    height: calc(100vh - var(--topbar-height));
+}
+
+.sidebar h2 {
+    color: var(--accent);
+    font-size: 0.8rem;
+    font-family: var(--font-body);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    margin: 0 0 20px 12px;
+    font-weight: 600;
+}
+
+.sidebar a {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    color: var(--text-light);
+    margin-bottom: 6px;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+    border-left: 3px solid transparent;
+}
+
+.sidebar a:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    cursor: pointer;
+    border-left-color: var(--accent-hover);
+}
+
+.sidebar a.active {
+    background: rgba(197, 160, 89, 0.1); /* Gold tint */
+    color: var(--accent);
+    border-left-color: var(--accent);
+    font-weight: 600;
+}
+
+.sidebar .logout {
+    margin-top: auto;
+    background: transparent;
+    color: #fff;
+    border: 1px solid var(--primary-light);
+    justify-content: center;
+    border-left: none;
+}
+
+.sidebar .logout:hover {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: #fff;
+}
+
+/* Main Content Area */
+.content {
+    flex: 1;
+    padding: 40px 48px;
+    width: 100%;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* Top-level page wrapper */
+main.page {
+    padding: 0;
+    margin: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+section.page {
+    padding: 40px 48px;
+    width: 100%;
+    margin: 0;
+}
+
+.page {
+    display: block;
+    background: transparent;
+}
+
+/* Dashboard panels */
+.panel {
+    display: none;
+    animation: fadeIn 0.4s ease forwards;
+}
+
+.panel.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* =========================================
+   4. COMPONENT: CARDS & CONTAINERS
+   ========================================= */
+.card {
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    padding: 36px;
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border);
+    transition: box-shadow 0.3s, transform 0.3s;
+    margin-bottom: 32px;
+}
+
+.card:hover {
+    box-shadow: var(--shadow-lg);
+}
+
+.compact {
+    max-width: 540px;
+    margin: 60px auto;
+}
+
+/* =========================================
+   5. COMPONENT: FORMS
+   ========================================= */
+.stack {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.grid {
+    display: grid;
+    gap: 20px;
+}
+
+.grid.two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+input, select, textarea {
+    width: 100%;
+    padding: 12px 16px;
+    background: #FAFAFB;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-family: inherit;
+    font-size: 0.95rem;
+    color: var(--text-main);
+    transition: all 0.3s ease;
+}
+
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: #FFF;
+    box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.15);
+}
+
+/* =========================================
+   6. COMPONENT: BUTTONS
+   ========================================= */
+button, .btn, .link-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 28px;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    border: none;
+    transition: all 0.3s ease;
+    gap: 8px;
+    font-family: var(--font-family);
+    text-decoration: none;
+    text-transform: uppercase;
+}
+
+/* Primary (Navy) */
+button, .btn-primary, .link-btn {
+    background: var(--primary);
+    color: #fff;
+    border: 1px solid var(--primary);
+}
+
+button:hover, .btn-primary:hover, .link-btn:hover {
+    background: var(--primary-hover);
+    color: #fff;
+    box-shadow: var(--shadow-sm);
+}
+
+button:active, .btn-primary:active {
+    transform: translateY(1px);
+}
+
+/* Accent (Gold) */
+.btn-accent {
+    background: var(--accent);
+    color: #fff;
+    border: 1px solid var(--accent);
+}
+.btn-accent:hover {
+    background: var(--accent-hover);
+    box-shadow: var(--shadow-sm);
+}
+
+/* Outline */
+.btn-outline-primary {
+    background: transparent;
+    border: 1px solid var(--primary);
+    color: var(--primary);
+}
+
+.btn-outline-primary:hover {
+    background: var(--primary);
+    color: #fff;
+}
+
+/* Danger */
+.btn-danger, .danger {
+    background: var(--danger);
+    color: #fff;
+    border: 1px solid var(--danger);
+}
+
+.btn-danger:hover {
+    background: #7a1b1e;
+}
+
+/* =========================================
+   7. COMPONENT: TABLES
+   ========================================= */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 16px;
+}
+
+th {
+    background: var(--primary);
+    color: #fff;
+    font-family: var(--font-heading);
+    font-weight: 600;
+    font-size: 0.95rem;
+    letter-spacing: 0.05em;
+    padding: 18px 16px;
+    text-align: left;
+    border: 1px solid var(--primary);
+}
+
+td {
+    padding: 16px;
+    background: #fff;
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    font-size: 0.95rem;
+    transition: background 0.2s;
+}
+
+tr:nth-child(even) td {
+    background: #FAFAFB;
+}
+
+tr:hover td {
+    background: #F1F4F9;
+}
+
+/* =========================================
+   8. UTILITIES & STATUS INDICATORS
+   ========================================= */
+.status-pill, .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.status-pill.ok, .approved {
+    background: var(--success-bg);
+    color: var(--success);
+    border: 1px solid var(--success);
+}
+
+.status-pill.pending, .pending-faculty, .pending-admin {
+    background: var(--warning-bg);
+    color: var(--warning);
+    border: 1px solid var(--warning);
+}
+
+.rejected-by-faculty, .rejected-by-admin, .rejected-by-hod {
+    background: var(--danger-bg);
+    color: var(--danger);
+    border: 1px solid var(--danger);
+}
+
+.alert {
+    padding: 16px 20px;
+    border-radius: var(--radius-md);
+    background: var(--warning-bg);
+    color: var(--warning);
+    border-left: 4px solid var(--warning);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.alert.success {
+    background: var(--success-bg);
+    color: var(--success);
+    border-left-color: var(--success);
+}
+
+.flex-between {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 0;
+    list-style: none;
+}
+
+.list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.list-item:hover {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-sm);
+}
+
+.pill {
+    background: var(--bg-body);
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    border: 1px solid var(--border);
+}
+
+.table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-top: 16px;
+    margin-bottom: 24px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+}
+.table-responsive table {
+    margin-top: 0;
+    min-width: 700px;
+}
+.table-responsive th:first-child {
+    border-top-left-radius: var(--radius-md);
+}
+.table-responsive th:last-child {
+    border-top-right-radius: var(--radius-md);
+}
+
+/* =========================================
+   9. MODAL & OVERLAYS
+   ========================================= */
+.modal {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: rgba(13, 27, 42, 0.8); /* Dark navy overlay */
+    backdrop-filter: blur(6px);
+    z-index: 60;
+    padding: 24px;
+}
+
+.modal[hidden] {
+    display: none;
+}
+
+.modal-dialog {
+    width: min(520px, 100%);
+    position: relative;
+    z-index: 1;
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: 40px;
+    border-top: 4px solid var(--accent);
+    animation: fadeInScale 0.3s ease;
+}
+
+@keyframes fadeInScale {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.icon-btn {
+    border: none;
+    background: transparent;
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: color 0.3s;
+    padding: 0;
+}
+
+.icon-btn:hover {
+    color: var(--danger);
+}
+
+/* =========================================
+   FOOTER
+   ========================================= */
+.footer {
+    padding: 24px 40px;
+    text-align: center;
+    background: var(--primary);
+    color: var(--text-light);
+    font-size: 0.95rem;
+    font-family: var(--font-body);
+    margin-top: auto;
+    border-top: 1px solid var(--primary-hover);
+}
+
+/* =========================================
+   10. RESPONSIVE DESIGN
+   ========================================= */
+@media (max-width: 768px) {
+    .layout-wrap {
+        flex-direction: column;
+    }
+    
+    .sidebar {
+        width: 100%;
+        height: auto;
+        position: relative;
+        top: 0;
+        flex-direction: row;
+        overflow-x: auto;
+        padding: 16px;
+        gap: 12px;
+        border-right: none;
+        border-bottom: 2px solid var(--accent);
+    }
+    
+    .sidebar h2 { display: none; }
+    
+    .sidebar a {
+        padding: 8px 16px;
+        white-space: nowrap;
+        margin: 0;
+        border-left: none;
+        border-bottom: 3px solid transparent;
+    }
+    
+    .sidebar a:hover {
+        border-bottom-color: var(--accent-hover);
+    }
+
+    .sidebar a.active {
+        border-bottom-color: var(--accent);
+    }
+    
+    .content, section.page {
+        padding: 24px 16px;
+    }
+    
+    .card {
+        padding: 24px 20px;
+        margin-bottom: 24px;
+    }
+    
+    .compact {
+        margin: 24px auto;
+    }
+    
+    .topbar {
+        height: auto;
+        padding: 16px 20px;
+        flex-direction: column;
+        gap: 16px;
+        align-items: center;
+    }
+    
+    .grid.two {
+        grid-template-columns: 1fr;
+    }
+}
