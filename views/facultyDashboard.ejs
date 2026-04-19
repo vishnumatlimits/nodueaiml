@@ -48,9 +48,11 @@
                         <td><%= r.reason %></td>
                         <td>
                             <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
+                                <input type="hidden" name="redirectPanel" value="pending" />
                                 <button type="submit" class="btn btn-accent">Approve</button>
                             </form>
                             <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
+                                <input type="hidden" name="redirectPanel" value="pending" />
                                 <button type="submit" class="btn btn-outline-primary">Deny</button>
                             </form>
                         </td>
@@ -126,6 +128,14 @@
                     <span class="badge"><%= mentorSubjectRequests && mentorSubjectRequests.length ? mentorSubjectRequests.length + ' requests' : 'No mentor requests' %></span>
                 </div>
 
+                <div style="margin:10px 0 14px;display:flex;gap:8px;flex-wrap:wrap;">
+                    <form action="/faculty/requests/approve-all" method="POST">
+                        <input type="hidden" name="scope" value="mentor" />
+                        <input type="hidden" name="redirectPanel" value="mentor-subject-data" />
+                        <button type="submit" class="btn btn-outline-primary">Approve all mentor requests</button>
+                    </form>
+                </div>
+
                 <% if (!mentorSubjectRequests || !mentorSubjectRequests.length) { %>
                     <p class="muted">No mentor subject requests pending for your mentees.</p>
                 <% } else { %>
@@ -151,9 +161,11 @@
                             <td><%= r.status || '-' %></td>
                             <td>
                                 <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
+                                    <input type="hidden" name="redirectPanel" value="mentor-subject-data" />
                                     <button type="submit" class="btn btn-accent">Approve</button>
                                 </form>
                                 <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
+                                    <input type="hidden" name="redirectPanel" value="mentor-subject-data" />
                                     <button type="submit" class="btn btn-outline-primary">Deny</button>
                                 </form>
                             </td>
@@ -169,6 +181,14 @@
                 <div class="flex-between">
                     <h2 id="objective-data">Objective approvals</h2>
                     <span class="badge"><%= objectiveGroups && objectiveGroups.length ? objectiveGroups.length + ' objectives' : 'No objective approvals' %></span>
+                </div>
+
+                <div style="margin:10px 0 14px;display:flex;gap:8px;flex-wrap:wrap;">
+                    <form action="/faculty/requests/approve-all" method="POST">
+                        <input type="hidden" name="scope" value="objective" />
+                        <input type="hidden" name="redirectPanel" value="objective-data" />
+                        <button type="submit" class="btn btn-outline-primary">Approve all objectives</button>
+                    </form>
                 </div>
 
                 <% if (!objectiveGroups || !objectiveGroups.length) { %>
@@ -190,7 +210,15 @@
                                     <strong><%= group.name %></strong>
                                     <% if (group.code) { %><span class="muted"> — <%= group.code.replace('OBJECTIVE::', '') %></span><% } %>
                                 </span>
-                                <span class="badge"><%= group.rows.length %> students</span>
+                                <span style="display:flex;gap:8px;align-items:center;">
+                                    <span class="badge"><%= group.rows.length %> students</span>
+                                    <form action="/faculty/requests/approve-all" method="POST" style="display:inline;">
+                                        <input type="hidden" name="scope" value="objective" />
+                                        <input type="hidden" name="objectiveCode" value="OBJECTIVE::<%= group.code %>" />
+                                        <input type="hidden" name="redirectPanel" value="objective-data" />
+                                        <button type="submit" class="btn btn-outline-primary btn-sm">Approve all in this objective</button>
+                                    </form>
+                                </span>
                             </summary>
 
                             <div style="margin-top:12px;">
@@ -280,6 +308,14 @@
                     <span class="badge"><%= mentorSubjectRequests && mentorSubjectRequests.length ? mentorSubjectRequests.length + ' requests' : 'No mentor requests' %></span>
                 </div>
 
+                <div style="margin:10px 0 12px;display:flex;gap:8px;flex-wrap:wrap;">
+                    <form action="/faculty/requests/approve-all" method="POST">
+                        <input type="hidden" name="scope" value="mentor" />
+                        <input type="hidden" name="redirectPanel" value="mentee-data" />
+                        <button type="submit" class="btn btn-outline-primary btn-sm">Approve all mentee mentor requests</button>
+                    </form>
+                </div>
+
                 <% if (!mentorSubjectRequests || !mentorSubjectRequests.length) { %>
                 <p class="muted">No mentor requests pending for your mentees.</p>
                 <% } else { %>
@@ -314,9 +350,11 @@
                             <%= r.status || '-' %>
                             <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
                                 <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
+                                    <input type="hidden" name="redirectPanel" value="mentee-data" />
                                     <button type="submit" class="btn btn-accent btn-sm">Approve</button>
                                 </form>
                                 <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
+                                    <input type="hidden" name="redirectPanel" value="mentee-data" />
                                     <button type="submit" class="btn btn-outline-primary btn-sm">Deny</button>
                                 </form>
                             </div>

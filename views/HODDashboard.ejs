@@ -135,6 +135,10 @@
 					<form action="/hod/requests/generate-mentor-subjects" method="POST">
 						<button type="submit" class="btn btn-outline-primary">Create mentor requests</button>
 					</form>
+					<form action="/hod/requests/approve-all-mentee" method="POST" onsubmit="return confirm('Approve all pending mentee requests?');">
+						<input type="hidden" name="redirectPanel" value="hod-mentee-data" />
+						<button type="submit" class="btn btn-accent">Approve all mentee requests</button>
+					</form>
 					<form action="/hod/requests/delete-mentor-subjects" method="POST" onsubmit="return confirm('Delete ALL mentor requests? This cannot be undone.');">
 						<button type="submit" class="btn btn-danger">Delete mentor requests</button>
 					</form>
@@ -1041,6 +1045,10 @@
 (() => {
 	const links = Array.from(document.querySelectorAll('[data-target]'));
 	const panels = Array.from(document.querySelectorAll('[data-panel]'));
+	const getActivePanelName = () => {
+		const activePanel = document.querySelector('.panel.active[data-panel]');
+		return activePanel ? activePanel.dataset.panel : '';
+	};
 	const activate = (name) => {
 		panels.forEach((p) => p.classList.toggle('active', p.dataset.panel === name));
 		links.forEach((l) => l.classList.toggle('active', l.dataset.target === name));
@@ -1055,6 +1063,23 @@
 	const serverInitial = "<%= initialPanel || '' %>";
 	const initial = serverInitial || window.location.hash?.replace('#', '') || links[0]?.dataset.target || 'pending';
 	activate(initial);
+
+	// Keep users on the same HOD tab after any POST form submission.
+	document.querySelectorAll('form[action^="/hod/"]').forEach((form) => {
+		if (form.getAttribute('action') === '/logout') return;
+		form.addEventListener('submit', () => {
+			const activePanel = getActivePanelName();
+			if (!activePanel) return;
+			let hidden = form.querySelector('input[name="redirectPanel"]');
+			if (!hidden) {
+				hidden = document.createElement('input');
+				hidden.type = 'hidden';
+				hidden.name = 'redirectPanel';
+				form.appendChild(hidden);
+			}
+			hidden.value = activePanel;
+		});
+	});
 
 	const modal = document.getElementById('editModal');
 	const form = document.getElementById('editForm');

@@ -230,6 +230,52 @@ const compareRollNumbers = (a, b) => {
   return left.localeCompare(right, undefined, { numeric: false, sensitivity: 'base' });
 };
 
+const pickBestMentorRequest = (rows = []) => {
+  if (!Array.isArray(rows) || !rows.length) return null;
+
+  const priority = (status) => {
+    switch (status) {
+      case 'Approved':
+        return 5;
+      case 'Rejected by Faculty':
+      case 'Rejected by HOD':
+        return 4;
+      case 'Pending HOD':
+        return 3;
+      case 'Pending Faculty':
+        return 2;
+      default:
+        return 1;
+    }
+  };
+
+  return rows
+    .slice()
+    .sort((a, b) => {
+      const pDiff = priority(b?.status) - priority(a?.status);
+      if (pDiff !== 0) return pDiff;
+      return new Date(b?.updatedAt || 0).getTime() - new Date(a?.updatedAt || 0).getTime();
+    })[0];
+};
+
+const HOD_DASHBOARD_PANELS = new Set([
+  'hod-subject-data',
+  'hod-mentee-data',
+  'student-clearance-search',
+  'manage-students',
+  'manage-faculty',
+  'manage-subjects',
+  'manage-mentors',
+  'manage-objective-approvals',
+  'profile',
+]);
+
+const redirectToHodPanel = (req, fallbackPanel = 'hod-subject-data') => {
+  const requested = (req.body?.redirectPanel || '').toString().trim();
+  const panel = HOD_DASHBOARD_PANELS.has(requested) ? requested : fallbackPanel;
+  return `/hod#${panel}`;
+};
+
 const isStudentInObjectiveYears = (studentYear, objectiveYears) => {
   if (!Array.isArray(objectiveYears) || !objectiveYears.length) return true;
   const sy = normalizeYearToken(studentYear);
@@ -1227,7 +1273,16 @@ app.post('/student/search', async (req, res) => {
       }).lean()
       : [];
 
-    const mentorRequestMap = new Map(mentorSubjectRequests.map((r) => [r.subjectCode, r]));
+    const mentorRequestsByCode = new Map();
+    mentorSubjectRequests.forEach((r) => {
+      const code = r.subjectCode || '';
+      if (!mentorRequestsByCode.has(code)) mentorRequestsByCode.set(code, []);
+      mentorRequestsByCode.get(code).push(r);
+    });
+    const mentorRequestMap = new Map();
+    mentorRequestsByCode.forEach((rows, code) => {
+      mentorRequestMap.set(code, pickBestMentorRequest(rows));
+    });
 
     // Legacy fallback for older mentor-request format
     const mentorReason = 'Mentor objectives: Achievements & Mentoring feedback';
@@ -1237,7 +1292,7 @@ app.post('/student/search', async (req, res) => {
       reason: mentorReason,
     }).lean();
 
-    const firstMentorRequest = mentorSubjectRequests[0] || legacyMentorRequest || null;
+    const firstMentorRequest = pickBestMentorRequest(mentorSubjectRequests) || legacyMentorRequest || null;
     const hasMentorMapping = !!(student.mentorFacultyId || firstMentorRequest);
 
     if (hasMentorMapping) {
@@ -1416,7 +1471,16 @@ app.post('/api/student/search-status', async (req, res) => {
       }).lean()
       : [];
 
-    const mentorRequestMap = new Map(mentorSubjectRequests.map((r) => [r.subjectCode, r]));
+    const mentorRequestsByCode = new Map();
+    mentorSubjectRequests.forEach((r) => {
+      const code = r.subjectCode || '';
+      if (!mentorRequestsByCode.has(code)) mentorRequestsByCode.set(code, []);
+      mentorRequestsByCode.get(code).push(r);
+    });
+    const mentorRequestMap = new Map();
+    mentorRequestsByCode.forEach((rows, code) => {
+      mentorRequestMap.set(code, pickBestMentorRequest(rows));
+    });
 
     // Legacy fallback for older mentor-request format
     const mentorReason = 'Mentor objectives: Achievements & Mentoring feedback';
@@ -1426,7 +1490,7 @@ app.post('/api/student/search-status', async (req, res) => {
       reason: mentorReason,
     }).lean();
 
-    const firstMentorRequest = mentorSubjectRequests[0] || legacyMentorRequest || null;
+    const firstMentorRequest = pickBestMentorRequest(mentorSubjectRequests) || legacyMentorRequest || null;
     const hasMentorMapping = !!(student.mentorFacultyId || firstMentorRequest);
 
     if (hasMentorMapping) {
@@ -1756,7 +1820,12 @@ app.post('/faculty/requests/:id/assignments', ensureRole('faculty', 'hod'), asyn
     // eslint-disable-next-line no-console
     console.error('Failed to update assignment status', err);
   }
-  // After saving, return the user to the most relevant panel.
+  const isHodUser = req.session?.user?.role === 'hod';
+  if (isHodUser) {
+    return res.redirect('/hod#hod-subject-data');
+  }
+
+  // After saving, return the user to the most relevant faculty panel.
   // Subject-based requests go to subject-wise approvals; mentor/general
   // requests (no subjectCode) go to the mentees panel.
   if (!request.subjectCode) {
@@ -1769,10 +1838,13 @@ app.post('/faculty/requests/:id/assignments', ensureRole('faculty', 'hod'), asyn
 app.post('/faculty/requests/bulk-assignments', ensureRole('faculty', 'hod'), async (req, res) => {
   const { assignments } = req.body;
   const subjectCode = (req.body.subjectCode || '').trim();
+  const isHodUser = req.session?.user?.role === 'hod';
+  const basePath = isHodUser ? '/hod' : '/faculty';
+  const panel = isHodUser ? 'hod-subject-data' : 'student-data';
 
   const studentDataRedirect = subjectCode
-    ? `/faculty?subject=${encodeURIComponent(subjectCode)}#student-data`
-    : '/faculty#student-data';
+    ? `${basePath}?subject=${encodeURIComponent(subjectCode)}#${panel}`
+    : `${basePath}#${panel}`;
 
   if (!assignments || typeof assignments !== 'object') {
     return res.redirect(studentDataRedirect);
@@ -1824,6 +1896,8 @@ app.post('/faculty/requests/bulk-assignments', ensureRole('faculty', 'hod'), asy
 app.post('/faculty/requests/:id/:action', ensureRole('faculty', 'hod'), async (req, res) => {
   const { id, action } = req.params;
   const { note, redirectPanel } = req.body;
+  const isHodUser = req.session?.user?.role === 'hod';
+  const dashboardBase = isHodUser ? '/hod' : '/faculty';
   const allowedPanels = new Set([
     'pending',
     'student-data',
@@ -1831,6 +1905,8 @@ app.post('/faculty/requests/:id/:action', ensureRole('faculty', 'hod'), async (r
     'mentee-data',
     'objective-data',
     'profile',
+    'hod-subject-data',
+    'hod-mentee-data',
   ]);
   const targetPanel = allowedPanels.has(redirectPanel) ? redirectPanel : null;
   let request;
@@ -1877,7 +1953,69 @@ app.post('/faculty/requests/:id/:action', ensureRole('faculty', 'hod'), async (r
     console.error('Failed to update faculty request status', err);
   }
 
-  return res.redirect(targetPanel ? `/faculty#${targetPanel}` : '/faculty');
+  return res.redirect(targetPanel ? `${dashboardBase}#${targetPanel}` : dashboardBase);
+});
+
+app.post('/faculty/requests/approve-all', ensureRole('faculty', 'hod'), async (req, res) => {
+  const scope = (req.body.scope || '').trim();
+  const redirectPanel = (req.body.redirectPanel || '').trim();
+  const objectiveCode = (req.body.objectiveCode || '').trim();
+  const allowedPanels = new Set(['mentor-subject-data', 'objective-data', 'mentee-data']);
+  const targetPanel = allowedPanels.has(redirectPanel) ? redirectPanel : 'pending';
+
+  const self = await loadCurrentFaculty(req);
+  if (!self || !self.facultyId) {
+    return res.redirect(`/faculty#${targetPanel}`);
+  }
+
+  const baseFilter = {
+    facultyId: self.facultyId,
+    status: 'Pending Faculty',
+  };
+
+  try {
+    if (scope === 'mentor') {
+      await Request.updateMany(
+        {
+          ...baseFilter,
+          subjectCode: { $regex: '^MENTOR::' },
+        },
+        {
+          $set: {
+            status: 'Approved',
+            facultyNote: 'Approved by faculty (bulk)',
+            assignment1: true,
+            assignment2: true,
+          },
+        },
+      );
+    } else if (scope === 'objective') {
+      const filter = {
+        ...baseFilter,
+        subjectCode: { $regex: '^OBJECTIVE::' },
+      };
+      if (objectiveCode) {
+        filter.subjectCode = objectiveCode;
+      }
+
+      await Request.updateMany(
+        filter,
+        {
+          $set: {
+            status: 'Approved',
+            facultyNote: 'Approved by faculty (bulk)',
+            assignment1: true,
+            assignment2: false,
+          },
+        },
+      );
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to bulk approve faculty requests', err);
+  }
+
+  return res.redirect(`/faculty#${targetPanel}`);
 });
 
 app.get('/hod', ensureRole('hod'), async (req, res) => renderHodDashboard(req, res));
@@ -1929,7 +2067,37 @@ app.post('/hod/requests/:id/:action', ensureRole('hod'), async (req, res) => {
     console.error('Failed to update HOD request status', err);
   }
 
-  return res.redirect(targetPanel ? `/hod#${targetPanel}` : '/hod');
+  return res.redirect(targetPanel ? `/hod#${targetPanel}` : redirectToHodPanel(req, 'hod-subject-data'));
+});
+
+app.post('/hod/requests/approve-all-mentee', ensureRole('hod'), async (req, res) => {
+  const self = await loadCurrentFaculty(req);
+  if (!self || !self.facultyId) {
+    return res.redirect(redirectToHodPanel(req, 'hod-mentee-data'));
+  }
+
+  try {
+    await Request.updateMany(
+      {
+        facultyId: self.facultyId,
+        subjectCode: { $regex: '^MENTOR::' },
+        status: { $in: ['Pending Faculty', 'Pending HOD'] },
+      },
+      {
+        $set: {
+          status: 'Approved',
+          adminNote: 'Cleared by HOD (bulk)',
+          assignment1: true,
+          assignment2: true,
+        },
+      },
+    );
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to bulk approve HOD mentee requests', err);
+  }
+
+  return res.redirect(redirectToHodPanel(req, 'hod-mentee-data'));
 });
 
 // HOD maintenance: remove all approval requests from the database.
@@ -1941,7 +2109,7 @@ app.post('/hod/requests/delete-all', ensureRole('hod'), async (req, res) => {
     console.error('Failed to delete all requests', err);
   }
 
-  return res.redirect('/hod#manage-subjects');
+  return res.redirect(redirectToHodPanel(req, 'manage-subjects'));
 });
 
 // HOD maintenance: create missing subject requests for all students.
@@ -1960,7 +2128,7 @@ app.post('/hod/requests/generate-all', ensureRole('hod'), async (req, res) => {
     console.error('Failed to generate requests for all subjects', err);
   }
 
-  return res.redirect('/hod#manage-subjects');
+  return res.redirect(redirectToHodPanel(req, 'manage-subjects'));
 });
 
 // HOD maintenance: create mentor-subject requests for all students mapped to mentors.
@@ -1979,7 +2147,7 @@ app.post('/hod/requests/generate-mentor-subjects', ensureRole('hod'), async (req
     console.error('Failed to generate mentor subject requests', err);
   }
 
-  return res.redirect('/hod#hod-mentee-data');
+  return res.redirect(redirectToHodPanel(req, 'hod-mentee-data'));
 });
 
 app.post('/hod/requests/delete-mentor-subjects', ensureRole('hod'), async (req, res) => {
@@ -1996,13 +2164,13 @@ app.post('/hod/requests/delete-mentor-subjects', ensureRole('hod'), async (req, 
     console.error('Failed to delete mentor requests', err);
   }
 
-  return res.redirect('/hod#manage-mentors');
+  return res.redirect(redirectToHodPanel(req, 'manage-mentors'));
 });
 
 // HOD maintenance: create missing objective-approval requests for all applicable students.
 app.post('/hod/requests/generate-objective-approvals', ensureRole('hod'), async (req, res) => {
   await ensureObjectiveRequestsForAllStudents();
-  return res.redirect('/hod#manage-objective-approvals');
+  return res.redirect(redirectToHodPanel(req, 'manage-objective-approvals'));
 });
 
 app.post('/hod/requests/delete-objective-approvals', ensureRole('hod'), async (req, res) => {
@@ -2018,7 +2186,7 @@ app.post('/hod/requests/delete-objective-approvals', ensureRole('hod'), async (r
     console.error('Failed to delete objective requests', err);
   }
 
-  return res.redirect('/hod#manage-objective-approvals');
+  return res.redirect(redirectToHodPanel(req, 'manage-objective-approvals'));
 });
 
 // Manage objective approvals (e.g., NASSCOM) and assign one faculty per objective.
@@ -2028,7 +2196,7 @@ app.post('/hod/objective-approvals', ensureRole('hod'), async (req, res) => {
   const yearsRaw = req.body.years;
 
   if (!rawName || !facultyId) {
-    return res.redirect('/hod#manage-objective-approvals');
+    return res.redirect(redirectToHodPanel(req, 'manage-objective-approvals'));
   }
 
   const years = Array.isArray(yearsRaw)
@@ -2065,7 +2233,7 @@ app.post('/hod/objective-approvals', ensureRole('hod'), async (req, res) => {
     console.error('Failed to create objective approval', err);
   }
 
-  return res.redirect('/hod#manage-objective-approvals');
+  return res.redirect(redirectToHodPanel(req, 'manage-objective-approvals'));
 });
 
 app.post('/hod/objective-approvals/:id/delete', ensureRole('hod'), async (req, res) => {
@@ -2080,7 +2248,7 @@ app.post('/hod/objective-approvals/:id/delete', ensureRole('hod'), async (req, r
     // eslint-disable-next-line no-console
     console.error('Failed to delete objective approval', err);
   }
-  return res.redirect('/hod#manage-objective-approvals');
+  return res.redirect(redirectToHodPanel(req, 'manage-objective-approvals'));
 });
 
 app.post('/hod/students', ensureRole('hod'), async (req, res) => {
@@ -2096,7 +2264,7 @@ app.post('/hod/students', ensureRole('hod'), async (req, res) => {
     mentorNotes,
   } = req.body;
   if (!rollNumber || !name) {
-    return res.redirect('/hod#manage-students');
+    return res.redirect(redirectToHodPanel(req, 'manage-students'));
   }
   try {
     const updatedStudent = await Student.findOneAndUpdate(
@@ -2122,19 +2290,19 @@ app.post('/hod/students', ensureRole('hod'), async (req, res) => {
     // eslint-disable-next-line no-console
     console.error('Failed to upsert student', err);
   }
-  return res.redirect('/hod#manage-students');
+  return res.redirect(redirectToHodPanel(req, 'manage-students'));
 });
 
 app.post('/hod/students/import', ensureRole('hod'), upload.single('csv'), async (req, res) => {
   if (!req.file) {
-    return res.redirect('/hod#manage-students');
+    return res.redirect(redirectToHodPanel(req, 'manage-students'));
   }
 
   try {
     const text = req.file.buffer.toString('utf8');
     const lines = text.split(/\r?\n/).filter((l) => l.trim().length);
     if (!lines.length) {
-      return res.redirect('/hod#manage-students');
+      return res.redirect(redirectToHodPanel(req, 'manage-students'));
     }
 
     const header = lines[0].split(',').map((h) => h.trim().toLowerCase());
@@ -2150,7 +2318,7 @@ app.post('/hod/students/import', ensureRole('hod'), upload.single('csv'), async 
     };
 
     if (idx.rollNumber === -1 || idx.name === -1) {
-      return res.redirect('/hod#manage-students');
+      return res.redirect(redirectToHodPanel(req, 'manage-students'));
     }
 
     const ops = [];
@@ -2198,7 +2366,7 @@ app.post('/hod/students/import', ensureRole('hod'), upload.single('csv'), async 
     console.error('Failed to import students from CSV', err);
   }
 
-  return res.redirect('/hod#manage-students');
+  return res.redirect(redirectToHodPanel(req, 'manage-students'));
 });
 
 app.post('/hod/students/:roll/update', ensureRole('hod'), async (req, res) => {
@@ -2254,7 +2422,7 @@ app.post('/hod/students/:roll/update', ensureRole('hod'), async (req, res) => {
     // eslint-disable-next-line no-console
     console.error('Failed to update student', err);
   }
-  return res.redirect('/hod#manage-students');
+  return res.redirect(redirectToHodPanel(req, 'manage-students'));
 });
 
 app.post('/hod/students/:roll/delete', ensureRole('hod'), async (req, res) => {
@@ -2265,13 +2433,13 @@ app.post('/hod/students/:roll/delete', ensureRole('hod'), async (req, res) => {
     // eslint-disable-next-line no-console
     console.error('Failed to delete student', err);
   }
-  return res.redirect('/hod#manage-students');
+  return res.redirect(redirectToHodPanel(req, 'manage-students'));
 });
 
 app.post('/hod/faculty', ensureRole('hod'), async (req, res) => {
   const { name, facultyId, password, department, role } = req.body;
   if (!name || !facultyId || !password || !department) {
-    return res.redirect('/hod#manage-faculty');
+    return res.redirect(redirectToHodPanel(req, 'manage-faculty'));
   }
   try {
     const hashed = await bcrypt.hash(password, 10);
@@ -2290,7 +2458,7 @@ app.post('/hod/faculty', ensureRole('hod'), async (req, res) => {
     // eslint-disable-next-line no-console
     console.error('Failed to upsert faculty', err);
   }
-  return res.redirect('/hod#manage-faculty');
+  return res.redirect(redirectToHodPanel(req, 'manage-faculty'));
 });
 
 app.post('/hod/faculty/:facultyId/update', ensureRole('hod'), async (req, res) => {
@@ -2321,7 +2489,7 @@ app.post('/hod/faculty/:facultyId/update', ensureRole('hod'), async (req, res) =
     // eslint-disable-next-line no-console
     console.error('Failed to update faculty', err);
   }
-  return res.redirect('/hod#manage-faculty');
+  return res.redirect(redirectToHodPanel(req, 'manage-faculty'));
 });
 
 app.post('/hod/faculty/:facultyId/delete', ensureRole('hod'), async (req, res) => {
@@ -2332,14 +2500,14 @@ app.post('/hod/faculty/:facultyId/delete', ensureRole('hod'), async (req, res) =
     // eslint-disable-next-line no-console
     console.error('Failed to delete faculty', err);
   }
-  return res.redirect('/hod#manage-faculty');
+  return res.redirect(redirectToHodPanel(req, 'manage-faculty'));
 });
 
 app.post('/hod/subjects', ensureRole('hod'), async (req, res) => {
   const { subjectCode, subjectName, year, semester } = req.body;
   let { facultyIds, branches, branch } = req.body;
   if (!subjectCode || !subjectName) {
-    return res.redirect('/hod#manage-subjects');
+    return res.redirect(redirectToHodPanel(req, 'manage-subjects'));
   }
   if (!Array.isArray(facultyIds) && typeof facultyIds === 'string' && facultyIds.length) {
     facultyIds = [facultyIds];
@@ -2400,7 +2568,7 @@ app.post('/hod/subjects', ensureRole('hod'), async (req, res) => {
     // eslint-disable-next-line no-console
     console.error('Failed to upsert subject(s)', err);
   }
-  return res.redirect('/hod#manage-subjects');
+  return res.redirect(redirectToHodPanel(req, 'manage-subjects'));
 });
 
 app.post('/hod/subjects/:code/update', ensureRole('hod'), async (req, res) => {
@@ -2473,13 +2641,13 @@ app.post('/hod/subjects/:code/update', ensureRole('hod'), async (req, res) => {
     // eslint-disable-next-line no-console
     console.error('Failed to update subject', err);
   }
-  return res.redirect('/hod#manage-subjects');
+  return res.redirect(redirectToHodPanel(req, 'manage-subjects'));
 });
 
 app.post('/hod/mentors/assign', ensureRole('hod'), async (req, res) => {
   const { mentorFacultyId, rollNumbers, mentorNotes } = req.body;
   if (!mentorFacultyId || !rollNumbers) {
-    return res.redirect('/hod#manage-mentors');
+    return res.redirect(redirectToHodPanel(req, 'manage-mentors'));
   }
 
   const rolls = rollNumbers
@@ -2564,14 +2732,14 @@ app.post('/hod/mentors/assign', ensureRole('hod'), async (req, res) => {
     // eslint-disable-next-line no-console
     console.error('Failed to assign mentors', err);
   }
-  return res.redirect('/hod#manage-mentors');
+  return res.redirect(redirectToHodPanel(req, 'manage-mentors'));
 });
 
 // Manage mentor subjects (common to all mentors)
 app.post('/hod/mentor-subjects', ensureRole('hod'), async (req, res) => {
   const rawName = (req.body.name || '').trim();
   if (!rawName) {
-    return res.redirect('/hod#manage-mentors');
+    return res.redirect(redirectToHodPanel(req, 'manage-mentors'));
   }
 
   // Auto-generate an internal code from the name
@@ -2590,7 +2758,7 @@ app.post('/hod/mentor-subjects', ensureRole('hod'), async (req, res) => {
     // eslint-disable-next-line no-console
     console.error('Failed to upsert mentor subject', err);
   }
-  return res.redirect('/hod#manage-mentors');
+  return res.redirect(redirectToHodPanel(req, 'manage-mentors'));
 });
 
 app.post('/hod/mentor-subjects/:id/delete', ensureRole('hod'), async (req, res) => {
@@ -2601,7 +2769,7 @@ app.post('/hod/mentor-subjects/:id/delete', ensureRole('hod'), async (req, res) 
     // eslint-disable-next-line no-console
     console.error('Failed to delete mentor subject', err);
   }
-  return res.redirect('/hod#manage-mentors');
+  return res.redirect(redirectToHodPanel(req, 'manage-mentors'));
 });
 
 app.post('/hod/subjects/:code/delete', ensureRole('hod'), async (req, res) => {
@@ -2623,7 +2791,7 @@ app.post('/hod/subjects/:code/delete', ensureRole('hod'), async (req, res) => {
     // eslint-disable-next-line no-console
     console.error('Failed to delete subject and its requests', err);
   }
-  return res.redirect('/hod#manage-subjects');
+  return res.redirect(redirectToHodPanel(req, 'manage-subjects'));
 });
 
 app.get('/admin', ensureRole('admin'), async (req, res) => {

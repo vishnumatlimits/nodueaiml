@@ -122,6 +122,44 @@ h3 { font-size: 1.35rem; }
     letter-spacing: 0.02em;
 }
 
+.brand-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--primary);
+    text-decoration: none;
+}
+
+.brand-wrap:hover {
+    color: var(--primary);
+}
+
+.brand-logo {
+    width: 170px;
+    height: 52px;
+    object-fit: contain;
+}
+
+.brand-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.1;
+}
+
+.brand-text strong {
+    font-family: var(--font-heading);
+    font-size: 1.05rem;
+    letter-spacing: 0.02em;
+}
+
+.brand-text small {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
 .user-meta {
     display: flex;
     align-items: center;
@@ -661,6 +699,16 @@ tr:hover td {
         flex-direction: column;
         gap: 16px;
         align-items: center;
+    }
+
+    .brand-wrap {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .brand-logo {
+        width: 140px;
+        height: 44px;
     }
     
     .grid.two {
