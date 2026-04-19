@@ -1364,7 +1364,9 @@ app.post('/login', loginRateLimiter, async (req, res) => {
         });
     }
 
-    const faculty = await Faculty.findOne({ facultyId: staffId }).lean();
+    const faculty = await Faculty.findOne({
+      facultyId: { $regex: `^${escapeRegex(staffId)}$`, $options: 'i' },
+    }).lean();
     if (!faculty) {
       return res
         .status(401)
@@ -1401,7 +1403,9 @@ app.post('/student/search', async (req, res) => {
   }
 
   try {
-    const student = await Student.findOne({ rollNumber }).lean();
+    const student = await Student.findOne({
+      rollNumber: { $regex: `^${escapeRegex(rollNumber)}$`, $options: 'i' },
+    }).lean();
     if (!student) {
       return res.status(404).render('login', {
         error: null,
@@ -1469,7 +1473,7 @@ app.post('/student/search', async (req, res) => {
     }
 
     const allRequests = await Request.find({
-      rollNumber,
+      rollNumber: student.rollNumber,
       subjectCode: { $in: subjectCodes },
     }).lean();
 
@@ -1646,7 +1650,9 @@ app.post('/api/student/search-status', async (req, res) => {
   }
 
   try {
-    const student = await Student.findOne({ rollNumber }).lean();
+    const student = await Student.findOne({
+      rollNumber: { $regex: `^${escapeRegex(rollNumber)}$`, $options: 'i' },
+    }).lean();
     if (!student) {
       return res.status(404).json({ error: 'Student not found.' });
     }
@@ -1667,7 +1673,7 @@ app.post('/api/student/search-status', async (req, res) => {
     const subjectCodes = subjects.map((s) => s.subjectCode);
 
     const allRequests = await Request.find({
-      rollNumber,
+      rollNumber: student.rollNumber,
       subjectCode: { $in: subjectCodes },
     }).lean();
 
