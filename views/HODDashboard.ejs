@@ -55,108 +55,71 @@
 			<div class="card">
 				<div class="flex-between">
 					<h2 id="hod-subject-data">Subject wise Faculty Approval Information</h2>
-					<span class="badge"><%= subjectGroups && subjectGroups.length ? subjectGroups.length + ' subjects' : 'No subjects' %></span>
+					<span class="badge"><%= hodSubjectGroups && hodSubjectGroups.length ? hodSubjectGroups.length + ' subjects' : 'No subjects' %></span>
 				</div>
 
-				<div class="card" style="margin-top: 14px;">
-					<div class="flex-between">
-						<h3>Pending HOD Approvals By Subject Code</h3>
-						<span class="badge"><%= pendingSubjectGroups && pendingSubjectGroups.length ? pendingSubjectGroups.length + ' groups' : 'No pending approvals' %></span>
-					</div>
-
-					<% if (!pendingSubjectGroups || !pendingSubjectGroups.length) { %>
-						<p class="muted">No pending HOD approvals available.</p>
-					<% } else { %>
-						<% pendingSubjectGroups.forEach(function(group){ %>
-							<div class="card subject-group-card" data-subject="<%= group.subjectCode || 'GENERAL' %>" style="margin-top: 12px;">
-								<h4 style="margin-bottom:10px;">
-									Subject Code: <%= group.subjectCode || 'GENERAL' %>
-									<small style="font-weight:400;color:#6b7280;"> - <%= group.subjectName || 'N/A' %></small>
-								</h4>
-								<table>
-									<tr>
-										<th>Roll Number</th>
-										<th>Student Name</th>
-										<th>Branch</th>
-										<th>Year</th>
-										<th>Semester</th>
-										<th>Status</th>
-										<th>Action</th>
-									</tr>
-									<% group.rows.forEach(function(r){ %>
-										<tr>
-											<td><%= r.rollNumber || '-' %></td>
-											<td><%= r.studentName || '-' %></td>
-											<td><%= r.branch || '-' %></td>
-											<td><%= r.year || '-' %></td>
-											<td><%= r.semester || '-' %></td>
-											<td><%= r.status || '-' %></td>
-											<td>
-												<div style="display:flex; gap:6px; flex-wrap:wrap;">
-													<form action="/hod/requests/<%= r.id %>/approve" method="POST">
-														<input type="hidden" name="redirectPanel" value="hod-subject-data" />
-														<button type="submit" class="btn btn-accent btn-sm">Approve</button>
-													</form>
-													<form action="/hod/requests/<%= r.id %>/deny" method="POST">
-														<input type="hidden" name="redirectPanel" value="hod-subject-data" />
-														<button type="submit" class="btn btn-danger btn-sm">Deny</button>
-													</form>
-												</div>
-											</td>
-										</tr>
-									<% }); %>
-								</table>
-							</div>
-						<% }); %>
-					<% } %>
-				</div>
-
-				<% if (!subjectGroups || !subjectGroups.length) { %>
-					<p class="muted">No subject-wise approvals available yet.</p>
+				<% if (!hodSubjectGroups || !hodSubjectGroups.length) { %>
+					<p class="muted">No assigned subjects available yet.</p>
 				<% } else { %>
-					<form action="/faculty/requests/bulk-assignments" method="POST">
-						<% subjectGroups.forEach(function(group){ %>
-							<div class="card subject-group-card" data-subject="<%= group.subjectCode %>" style="margin-top:16px;">
-								<h3><%= group.subjectName %> <small style="font-weight:400;color:#6b7280;">(<%= group.subjectCode || 'Code N/A' %>)</small></h3>
-								<table>
-									<tr>
-										<th>S.No</th>
-										<th>Roll Number</th>
-										<th>Subject</th>
-										<th>Assignment 1</th>
-										<th>Assignment 2</th>
-										<th>Remarks</th>
-									</tr>
-									<% group.rows.forEach(function(r, idx){ %>
-										<tr>
-											<td><%= idx + 1 %></td>
-											<td><%= r.rollNumber || '-' %></td>
-											<td><%= r.subjectName || group.subjectName %></td>
-											<td style="text-align:center;">
-												<input type="checkbox" name="assignments[<%= r.id %>][assignment1]" <%= r.assignment1 ? 'checked' : '' %> />
-											</td>
-											<td style="text-align:center;">
-												<input type="checkbox" name="assignments[<%= r.id %>][assignment2]" <%= r.assignment2 ? 'checked' : '' %> />
-											</td>
-											<td>
-												<input
-													type="text"
-													name="assignments[<%= r.id %>][facultyNote]"
-													value="<%= r.facultyNote || '' %>"
-													placeholder="Remarks"
-													style="width:100%;max-width:260px;"
-												/>
-											</td>
-										</tr>
-									<% }); %>
-								</table>
-							</div>
+					<div style="display:flex;flex-direction:column;gap:12px;margin-top:14px;">
+						<% hodSubjectGroups.forEach(function(group){ %>
+							<details class="card subject-group-card" data-subject="<%= group.subjectCode || 'GENERAL' %>">
+								<summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:12px;align-items:center;">
+									<span>
+										<strong>Subject Code: <%= group.subjectCode || 'GENERAL' %></strong>
+										<span class="muted"> — <%= group.subjectName || 'N/A' %></span>
+									</span>
+									<span class="badge"><%= group.pendingCount %> pending / <%= group.totalCount %> total</span>
+								</summary>
+								<div style="margin-top:12px;">
+									<% if (!group.rows.length) { %>
+										<p class="muted">No requests available for this subject.</p>
+									<% } else { %>
+										<form action="/faculty/requests/bulk-assignments" method="POST">
+											<input type="hidden" name="subjectCode" value="<%= group.subjectCode || '' %>" />
+											<table>
+												<tr>
+													<th>S.No</th>
+													<th>Roll Number</th>
+													<th>Student Name</th>
+													<th>Assignment 1</th>
+													<th>Assignment 2</th>
+													<th>Status</th>
+													<th>Remarks</th>
+												</tr>
+												<% group.rows.forEach(function(r, idx){ %>
+													<tr>
+														<td><%= idx + 1 %></td>
+														<td><%= r.rollNumber || '-' %></td>
+														<td><%= r.studentName || '-' %></td>
+														<td style="text-align:center;">
+															<input type="checkbox" name="assignments[<%= r.id %>][assignment1]" <%= r.assignment1 ? 'checked' : '' %> />
+														</td>
+														<td style="text-align:center;">
+															<input type="checkbox" name="assignments[<%= r.id %>][assignment2]" <%= r.assignment2 ? 'checked' : '' %> />
+														</td>
+														<td><%= r.status || '-' %></td>
+														<td>
+															<input
+																type="text"
+																name="assignments[<%= r.id %>][facultyNote]"
+																value="<%= r.facultyNote || '' %>"
+																placeholder="Remarks"
+																style="width:100%;max-width:260px;"
+															/>
+														</td>
+													</tr>
+												<% }); %>
+											</table>
+											<div style="margin-top:12px;display:flex;justify-content:flex-end;">
+												<button type="submit" class="btn btn-accent btn-sm">Save <%= group.subjectCode || group.subjectName %></button>
+											</div>
+										</form>
+									<% } %>
+								</div>
+							</details>
 						<% }); %>
-						<div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center;">
-							<p style="color:#6b7280;font-size:0.9rem;margin:0;"><em>Auto-saves on each change</em></p>
-							<button type="submit" class="btn btn-accent">Save all (Manual backup)</button>
-						</div>
-					</form>
+					</div>
 				<% } %>
 			</div>
 		</div>
@@ -171,6 +134,9 @@
 				<div style="display:flex; gap:10px; flex-wrap:wrap; margin:12px 0 16px;">
 					<form action="/hod/requests/generate-mentor-subjects" method="POST">
 						<button type="submit" class="btn btn-outline-primary">Create mentor requests</button>
+					</form>
+					<form action="/hod/requests/delete-mentor-subjects" method="POST" onsubmit="return confirm('Delete ALL mentor requests? This cannot be undone.');">
+						<button type="submit" class="btn btn-danger">Delete mentor requests</button>
 					</form>
 				</div>
 
@@ -310,171 +276,149 @@
 
 		<div class="panel" data-panel="manage-students">
 			<div class="card" id="manage-students">
-			<div class="flex-between">
-				<h2>Manage students</h2>
-				<span class="badge">Add / edit</span>
-			</div>
-			<form action="/hod/students" method="POST" class="stack">
-				<div class="grid two">
-					<label class="field">
-						<span>Roll number</span>
-						<input type="text" name="rollNumber" placeholder="Enter Roll Number" required />
-					</label>
-					<label class="field">
-						<span>Name</span>
-						<input type="text" name="name" placeholder="Enter Name" required />
-					</label>
-				</div>
-				<div class="grid two">
-					<label class="field">
-						<span>Branch</span>
-						<input type="text" name="branch" placeholder="e.g., CSE" />
-					</label>
-					<label class="field">
-						<span>Department</span>
-						<input type="text" name="department" placeholder="e.g., CSM" />
-					</label>
-				</div>
-				<div class="grid two">
-					<label class="field">
-						<span>Year</span>
-						<input type="text" name="year" placeholder="e.g., II" />
-					</label>
-					<label class="field">
-						<span>Semester</span>
-						<input type="text" name="semester" placeholder="e.g., I or II" />
-					</label>
-				</div>
-				<div class="grid two">
-					<label class="field">
-						<span>Section</span>
-						<input type="text" name="section" placeholder="A / B / C" />
-					</label>
-					<label class="field">
-						<span>Mentor (faculty ID)</span>
-						<input type="text" name="mentorFacultyId" placeholder="e.g., FAC101" />
-					</label>
-				</div>
-				<label class="field">
-					<span>Mentor notes / objectives</span>
-					<textarea name="mentorNotes" rows="2" placeholder="Any mentor objectives or notes"></textarea>
-				</label>
-				<button type="submit" class="btn btn-accent">Add student</button>
-			</form>
-
-			<div class="card" style="margin-top:16px;">
 				<div class="flex-between">
-					<h3>Bulk import students (CSV)</h3>
-					<span class="badge">Upload file</span>
+					<h2>Manage students</h2>
+					<span class="badge">Add / edit</span>
 				</div>
-				<p class="muted">Upload a CSV file with columns: rollNumber, name, branch, department, year, semester, section, mentorFacultyId.</p>
-				<form action="/hod/students/import" method="POST" enctype="multipart/form-data" class="stack">
+
+				<form action="/hod/students" method="POST" class="stack">
+					<div class="grid two">
+						<label class="field">
+							<span>Roll number</span>
+							<input type="text" name="rollNumber" placeholder="Enter Roll Number" required />
+						</label>
+						<label class="field">
+							<span>Name</span>
+							<input type="text" name="name" placeholder="Enter Name" required />
+						</label>
+					</div>
+					<div class="grid two">
+						<label class="field">
+							<span>Branch</span>
+							<input type="text" name="branch" placeholder="e.g., CSE" />
+						</label>
+						<label class="field">
+							<span>Department</span>
+							<input type="text" name="department" placeholder="e.g., CSM" />
+						</label>
+					</div>
+					<div class="grid two">
+						<label class="field">
+							<span>Year</span>
+							<input type="text" name="year" placeholder="e.g., II" />
+						</label>
+						<label class="field">
+							<span>Semester</span>
+							<input type="text" name="semester" placeholder="e.g., I or II" />
+						</label>
+					</div>
+					<div class="grid two">
+						<label class="field">
+							<span>Section</span>
+							<input type="text" name="section" placeholder="A / B / C" />
+						</label>
+						<label class="field">
+							<span>Mentor (faculty ID)</span>
+							<input type="text" name="mentorFacultyId" placeholder="e.g., FAC101" />
+						</label>
+					</div>
 					<label class="field">
-						<span>CSV file</span>
-						<input type="file" name="csv" accept=".csv" required />
+						<span>Mentor notes / objectives</span>
+						<textarea name="mentorNotes" rows="2" placeholder="Any mentor objectives or notes"></textarea>
 					</label>
-					<button type="submit" class="btn btn-outline-primary">Import from CSV</button>
+					<button type="submit" class="btn btn-accent">Add student</button>
 				</form>
-			</div>
 
-			<div class="card">
-				<div class="flex-between">
-					<h3>Student list</h3>
-					<span class="badge"><%= students.length %> total</span>
+				<div class="card" style="margin-top:16px;">
+					<div class="flex-between">
+						<h3>Bulk import students (CSV)</h3>
+						<span class="badge">Upload file</span>
+					</div>
+					<p class="muted">Upload a CSV file with columns: rollNumber, name, branch, department, year, semester, section, mentorFacultyId.</p>
+					<form action="/hod/students/import" method="POST" enctype="multipart/form-data" class="stack">
+						<label class="field">
+							<span>CSV file</span>
+							<input type="file" name="csv" accept=".csv" required />
+						</label>
+						<button type="submit" class="btn btn-outline-primary">Import from CSV</button>
+					</form>
 				</div>
-				<table>
-					<tr>
-						<th>Roll number</th>
-						<th>Name</th>
-						<th>Branch</th>
-						<th>Dept</th>
-						<th>Year</th>
-						<th>Sem</th>
-						<th>Section</th>
-						<th>Mentor</th>
-						<th>Edit</th>
-						<th>Delete</th>
-					</tr>
-					<% students.forEach((s) => { const formId = `edit-${s.rollNumber}`; %>
-					<tr>
-						<form id="<%= formId %>" action="/hod/students/<%= s.rollNumber %>/update" method="POST"></form>
-						<td><input form="<%= formId %>" name="rollNumber" value="<%= s.rollNumber %>" required /></td>
-						<td><input form="<%= formId %>" name="name" value="<%= s.name %>" required /></td>
-						<td><input form="<%= formId %>" name="branch" value="<%= s.branch || '' %>" /></td>
-						<td><input form="<%= formId %>" name="department" value="<%= s.department || '' %>" /></td>
-						<td><input form="<%= formId %>" name="year" value="<%= s.year || '' %>" /></td>
-						<td><input form="<%= formId %>" name="semester" value="<%= s.semester || '' %>" /></td>
-						<td><input form="<%= formId %>" name="section" value="<%= s.section || '' %>" /></td>
-						<td><input form="<%= formId %>" name="mentorFacultyId" value="<%= s.mentorFacultyId || '' %>" /></td>
-						<td>
-							<button
-								type="button"
-								class="edit-btn"
-								data-type="student"
-								data-id="<%= s.rollNumber %>"
-								data-name="<%= s.name %>"
-								data-branch="<%= s.branch || '' %>"
-								data-department="<%= s.department || '' %>"
-								data-year="<%= s.year || '' %>"
-								data-semester="<%= s.semester || '' %>"
-								data-section="<%= s.section || '' %>"
-								data-mentor="<%= s.mentorFacultyId || '' %>"
-								data-notes="<%= s.mentorNotes || '' %>"
-							>
-								Edit
-							</button>
-						</td>
-						<td>
-							<form action="/hod/students/<%= s.rollNumber %>/delete" method="POST" onsubmit="return confirm('Delete this student?');">
-								<button type="submit" class="danger">Delete</button>
-							</form>
-						</td>
-					</tr>
-					<% }); %>
-				</table>
-			</div>
 
-		<% const departments = []; students.forEach((s) => { if (s.department && !departments.includes(s.department)) departments.push(s.department); }); %>
-		<div class="card" style="margin-top:16px;">
-			<div class="flex-between">
-				<h3>Students by department</h3>
-				<span class="badge"><%= departments.length %> departments</span>
-			</div>
-			<% if (!departments.length) { %>
-				<p class="muted">No departments found on student records.</p>
-			<% } else { %>
-				<div style="margin:8px 0; display:flex; flex-wrap:wrap; gap:8px;">
-					<button type="button" class="btn btn-outline-primary dept-chip active" data-dept="__all">All</button>
-					<% departments.forEach(function(d){ %>
-						<button type="button" class="btn btn-outline-primary dept-chip" data-dept="<%= d %>"><%= d %></button>
-					<% }); %>
-				</div>
-				<table id="dept-students-table">
-					<tr>
-						<th>Roll number</th>
-						<th>Name</th>
-						<th>Branch</th>
-						<th>Dept</th>
-						<th>Year</th>
-						<th>Sem</th>
-						<th>Section</th>
-					</tr>
-					<tbody>
-						<% students.forEach((s) => { %>
-						<tr data-dept="<%= s.department || '' %>">
-							<td><%= s.rollNumber %></td>
-							<td><%= s.name %></td>
-							<td><%= s.branch || '-' %></td>
-							<td><%= s.department || '-' %></td>
-							<td><%= s.year || '-' %></td>
-							<td><%= s.semester || '-' %></td>
-							<td><%= s.section || '-' %></td>
+				<% const departments = []; students.forEach((s) => { if (s.department && !departments.includes(s.department)) departments.push(s.department); }); %>
+				<div class="card" style="margin-top:16px;">
+					<div class="flex-between">
+						<h3>Student list</h3>
+						<span class="badge"><%= students.length %> total</span>
+					</div>
+					<div class="grid two" style="margin-top:12px;">
+						<label class="field">
+							<span>Search students</span>
+							<input type="text" id="student-search-input" placeholder="Search by roll number or name" />
+						</label>
+						<label class="field">
+							<span>Filter by department</span>
+							<select id="student-dept-filter">
+								<option value="__all">All departments</option>
+								<% departments.forEach(function(d){ %>
+									<option value="<%= d %>"><%= d %></option>
+								<% }); %>
+							</select>
+						</label>
+					</div>
+					<table id="student-list-table" style="margin-top:12px;">
+						<tr>
+							<th>Roll number</th>
+							<th>Name</th>
+							<th>Branch</th>
+							<th>Dept</th>
+							<th>Year</th>
+							<th>Sem</th>
+							<th>Section</th>
+							<th>Mentor</th>
+							<th>Edit</th>
+							<th>Delete</th>
 						</tr>
-						<% }); %>
-					</tbody>
-				</table>
-			<% } %>
-		</div>
+						<tbody>
+							<% students.forEach((s) => { const formId = `edit-${s.rollNumber}`; %>
+							<tr data-roll="<%= (s.rollNumber || '').toLowerCase() %>" data-name="<%= (s.name || '').toLowerCase() %>" data-dept="<%= s.department || '' %>">
+								<form id="<%= formId %>" action="/hod/students/<%= s.rollNumber %>/update" method="POST"></form>
+								<td><input form="<%= formId %>" name="rollNumber" value="<%= s.rollNumber %>" required /></td>
+								<td><input form="<%= formId %>" name="name" value="<%= s.name %>" required /></td>
+								<td><input form="<%= formId %>" name="branch" value="<%= s.branch || '' %>" /></td>
+								<td><input form="<%= formId %>" name="department" value="<%= s.department || '' %>" /></td>
+								<td><input form="<%= formId %>" name="year" value="<%= s.year || '' %>" /></td>
+								<td><input form="<%= formId %>" name="semester" value="<%= s.semester || '' %>" /></td>
+								<td><input form="<%= formId %>" name="section" value="<%= s.section || '' %>" /></td>
+								<td><input form="<%= formId %>" name="mentorFacultyId" value="<%= s.mentorFacultyId || '' %>" /></td>
+								<td>
+									<button
+										type="button"
+										class="edit-btn"
+										data-type="student"
+										data-id="<%= s.rollNumber %>"
+										data-name="<%= s.name %>"
+										data-branch="<%= s.branch || '' %>"
+										data-department="<%= s.department || '' %>"
+										data-year="<%= s.year || '' %>"
+										data-semester="<%= s.semester || '' %>"
+										data-section="<%= s.section || '' %>"
+										data-mentor="<%= s.mentorFacultyId || '' %>"
+										data-notes="<%= s.mentorNotes || '' %>"
+									>
+										Edit
+									</button>
+								</td>
+								<td>
+									<form action="/hod/students/<%= s.rollNumber %>/delete" method="POST" onsubmit="return confirm('Delete this student?');">
+										<button type="submit" class="danger">Delete</button>
+									</form>
+								</td>
+							</tr>
+							<% }); %>
+						</tbody>
+					</table>
+					<p class="muted" id="student-list-empty" style="margin-top:10px;display:none;">No students match your search/filter.</p>
+				</div>
 			</div>
 		</div>
 
@@ -875,6 +819,9 @@
 						<form action="/hod/requests/generate-objective-approvals" method="POST">
 							<button type="submit" class="btn btn-outline-primary">Generate objective requests for students</button>
 						</form>
+						<form action="/hod/requests/delete-objective-approvals" method="POST" onsubmit="return confirm('Delete ALL objective requests? This cannot be undone.');">
+							<button type="submit" class="btn btn-danger">Delete objective requests</button>
+						</form>
 					</div>
 
 					<form action="/hod/objective-approvals" method="POST" class="stack" style="margin-top:14px;">
@@ -1259,25 +1206,35 @@
 		});
 	});
 
-	// Department-wise student filter in "Students by department" subsection
-	const deptChips = Array.from(document.querySelectorAll('.dept-chip'));
-	const deptRows = Array.from(document.querySelectorAll('#dept-students-table tbody tr'));
-	const filterDept = (dept) => {
-		deptRows.forEach((row) => {
+	const studentSearchInput = document.getElementById('student-search-input');
+	const studentDeptFilter = document.getElementById('student-dept-filter');
+	const studentRows = Array.from(document.querySelectorAll('#student-list-table tbody tr'));
+	const studentListEmpty = document.getElementById('student-list-empty');
+
+	const updateStudentFilter = () => {
+		const search = (studentSearchInput?.value || '').trim().toLowerCase();
+		const dept = studentDeptFilter?.value || '__all';
+		let visible = 0;
+
+		studentRows.forEach((row) => {
+			const rowRoll = row.dataset.roll || '';
+			const rowName = row.dataset.name || '';
 			const rowDept = row.dataset.dept || '';
-			row.style.display = !dept || dept === '__all' || rowDept === dept ? '' : 'none';
+			const matchesSearch = !search || rowRoll.includes(search) || rowName.includes(search);
+			const matchesDept = dept === '__all' || rowDept === dept;
+			const show = matchesSearch && matchesDept;
+			row.style.display = show ? '' : 'none';
+			if (show) visible += 1;
 		});
+
+		if (studentListEmpty) {
+			studentListEmpty.style.display = visible ? 'none' : 'block';
+		}
 	};
-	if (deptChips.length && deptRows.length) {
-		deptChips.forEach((chip) => {
-			chip.addEventListener('click', () => {
-				const dept = chip.dataset.dept;
-				deptChips.forEach((c) => c.classList.toggle('active', c === chip));
-				filterDept(dept);
-			});
-		});
-		filterDept('__all');
-	}
+
+	studentSearchInput?.addEventListener('input', updateStudentFilter);
+	studentDeptFilter?.addEventListener('change', updateStudentFilter);
+	updateStudentFilter();
 
 	// Helper function to show toast notification
 	const showToast = (message, duration = 2000) => {

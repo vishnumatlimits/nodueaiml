@@ -224,6 +224,12 @@ const normalizeYearToken = (value) => {
   return raw;
 };
 
+const compareRollNumbers = (a, b) => {
+  const left = (a || '').toString().trim().toUpperCase();
+  const right = (b || '').toString().trim().toUpperCase();
+  return left.localeCompare(right, undefined, { numeric: false, sensitivity: 'base' });
+};
+
 const isStudentInObjectiveYears = (studentYear, objectiveYears) => {
   if (!Array.isArray(objectiveYears) || !objectiveYears.length) return true;
   const sy = normalizeYearToken(studentYear);
@@ -786,6 +792,50 @@ const renderFacultyDashboard = async (req, res, extras = {}) => {
     console.error('Failed to load mentor subjects', err);
   }
 
+  let objectiveApprovals = [];
+  try {
+    objectiveApprovals = await ObjectiveApproval.find({ facultyId: self.facultyId }).sort({ name: 1 }).lean();
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to load objective approvals', err);
+  }
+
+  const objectiveRequestMap = new Map();
+  objectiveRequests.forEach((r) => {
+    const key = (r.subjectCode || '').trim() || (r.subjectName || '').trim();
+    if (!objectiveRequestMap.has(key)) {
+      objectiveRequestMap.set(key, []);
+    }
+    objectiveRequestMap.get(key).push(r);
+  });
+
+  const objectiveGroups = objectiveApprovals.map((objective) => {
+    const code = `OBJECTIVE::${objective.code}`;
+    const rows = (objectiveRequestMap.get(code) || []).slice().sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber));
+    return {
+      code: objective.code,
+      name: objective.name,
+      facultyId: objective.facultyId,
+      years: objective.years || [],
+      rows,
+    };
+  });
+
+  // Include any objective requests not linked to a current objective definition,
+  // so older records still remain visible.
+  objectiveRequests.forEach((r) => {
+    const key = (r.subjectCode || '').trim() || (r.subjectName || '').trim();
+    if (objectiveApprovals.some((obj) => `OBJECTIVE::${obj.code}` === key)) return;
+    if (objectiveGroups.some((g) => g.code === key)) return;
+    objectiveGroups.push({
+      code: key,
+      name: r.subjectName || r.reason || 'Objective',
+      facultyId: r.facultyId || self.facultyId,
+      years: [],
+      rows: (objectiveRequestMap.get(key) || []).slice().sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber)),
+    });
+  });
+
   // Group subject-wise for tabular display (like approval sheets)
   const subjectGroupsMap = new Map();
   subjectRequests.forEach((r) => {
@@ -822,6 +872,8 @@ const renderFacultyDashboard = async (req, res, extras = {}) => {
     mentorRequests,
     mentorSubjectRequests,
     objectiveRequests,
+    objectiveApprovals,
+    objectiveGroups,
     mentorSubjects,
     subjectGroups,
     assignedMentees,
@@ -841,6 +893,7 @@ const renderHodDashboard = async (req, res, extras = {}) => {
 
   // Load subject-wise requests for this HOD acting strictly as assigned faculty
   let subjectGroups = [];
+  let hodSubjectGroups = [];
   try {
     let myRequests = await Request.find({
       facultyId: self.facultyId,
@@ -874,11 +927,19 @@ const renderHodDashboard = async (req, res, extras = {}) => {
 
     subjectGroups.forEach((group) => {
       group.rows.sort((a, b) => {
-        const ra = (a.rollNumber || '').toString();
-        const rb = (b.rollNumber || '').toString();
-        return ra.localeCompare(rb);
+        return compareRollNumbers(a.rollNumber, b.rollNumber);
       });
     });
+
+    hodSubjectGroups = subjectGroups.map((group) => {
+      const pendingRows = group.rows.filter((r) => r.status !== 'Approved');
+      return {
+        ...group,
+        pendingRows: pendingRows.slice().sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber)),
+        pendingCount: pendingRows.length,
+        totalCount: group.rows.length,
+      };
+    }).sort((a, b) => (a.subjectCode || '').localeCompare(b.subjectCode || ''));
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('Failed to load HOD subject-wise requests', err);
@@ -961,6 +1022,7 @@ const renderHodDashboard = async (req, res, extras = {}) => {
     objectiveApprovals,
     self,
     subjectGroups,
+    hodSubjectGroups,
     pendingSubjectGroups,
     dataError,
     profileError: extras.profileError || null,
@@ -1920,9 +1982,42 @@ app.post('/hod/requests/generate-mentor-subjects', ensureRole('hod'), async (req
   return res.redirect('/hod#hod-mentee-data');
 });
 
+app.post('/hod/requests/delete-mentor-subjects', ensureRole('hod'), async (req, res) => {
+  try {
+    await Request.deleteMany({
+      $or: [
+        { subjectCode: { $regex: '^MENTOR::' } },
+        { reason: { $regex: '^Mentor objective:' } },
+        { reason: 'Mentor objectives: Achievements & Mentoring feedback' },
+      ],
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to delete mentor requests', err);
+  }
+
+  return res.redirect('/hod#manage-mentors');
+});
+
 // HOD maintenance: create missing objective-approval requests for all applicable students.
 app.post('/hod/requests/generate-objective-approvals', ensureRole('hod'), async (req, res) => {
   await ensureObjectiveRequestsForAllStudents();
+  return res.redirect('/hod#manage-objective-approvals');
+});
+
+app.post('/hod/requests/delete-objective-approvals', ensureRole('hod'), async (req, res) => {
+  try {
+    await Request.deleteMany({
+      $or: [
+        { subjectCode: { $regex: '^OBJECTIVE::' } },
+        { reason: { $regex: '^Objective approval:' } },
+      ],
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to delete objective requests', err);
+  }
+
   return res.redirect('/hod#manage-objective-approvals');
 });
 

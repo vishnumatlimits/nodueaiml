@@ -168,49 +168,74 @@
             <div class="card">
                 <div class="flex-between">
                     <h2 id="objective-data">Objective approvals</h2>
-                    <span class="badge"><%= objectiveRequests && objectiveRequests.length ? objectiveRequests.length + ' requests' : 'No objective requests' %></span>
+                    <span class="badge"><%= objectiveGroups && objectiveGroups.length ? objectiveGroups.length + ' objectives' : 'No objective approvals' %></span>
                 </div>
 
-                <% if (!objectiveRequests || !objectiveRequests.length) { %>
+                <% if (!objectiveGroups || !objectiveGroups.length) { %>
                     <p class="muted">No objective approvals are assigned to you right now.</p>
                 <% } else { %>
-                    <table>
-                        <tr>
-                            <th>Student</th>
-                            <th>Roll number</th>
-                            <th>Objective</th>
-                            <th>Branch / Year</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                        <% objectiveRequests.forEach(function(r){ %>
-                        <tr>
-                            <td><%= r.studentName || '-' %></td>
-                            <td><%= r.rollNumber || '-' %></td>
-                            <td><%= r.subjectName || r.reason || '-' %></td>
-                            <td>
-                                <%= r.branch || '-' %>
-                                <% if (r.year) { %> • Year <%= r.year %><% } %>
-                                <% if (r.semester) { %> • Sem <%= r.semester %><% } %>
-                            </td>
-                            <td><%= r.status || '-' %></td>
-                            <td>
-                                <% if (r.status === 'Pending Faculty') { %>
-                                    <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
-                                        <input type="hidden" name="redirectPanel" value="objective-data" />
-                                        <button type="submit" class="btn btn-accent">Approve</button>
-                                    </form>
-                                    <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
-                                        <input type="hidden" name="redirectPanel" value="objective-data" />
-                                        <button type="submit" class="btn btn-outline-primary">Deny</button>
-                                    </form>
-                                <% } else { %>
-                                    <span class="muted">-</span>
-                                <% } %>
-                            </td>
-                        </tr>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 14px;">
+                        <% objectiveGroups.forEach(function(group){ %>
+                            <a href="#objective-<%= group.code %>" class="btn btn-outline-primary btn-sm" style="text-decoration:none;">
+                                <%= group.name %>
+                                <span class="badge" style="margin-left:6px;"><%= group.rows.length %></span>
+                            </a>
                         <% }); %>
-                    </table>
+                    </div>
+
+                    <% objectiveGroups.forEach(function(group){ %>
+                        <details class="card" id="objective-<%= group.code %>" style="margin-top:12px;">
+                            <summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                                <span>
+                                    <strong><%= group.name %></strong>
+                                    <% if (group.code) { %><span class="muted"> — <%= group.code.replace('OBJECTIVE::', '') %></span><% } %>
+                                </span>
+                                <span class="badge"><%= group.rows.length %> students</span>
+                            </summary>
+
+                            <div style="margin-top:12px;">
+                                <% if (!group.rows.length) { %>
+                                    <p class="muted">No students mapped yet.</p>
+                                <% } else { %>
+                                    <table>
+                                        <tr>
+                                            <th>Student</th>
+                                            <th>Roll number</th>
+                                            <th>Branch / Year</th>
+                                            <th>Status</th>
+                                            <th>Action</th>
+                                        </tr>
+                                        <% group.rows.forEach(function(r){ %>
+                                        <tr>
+                                            <td><%= r.studentName || '-' %></td>
+                                            <td><%= r.rollNumber || '-' %></td>
+                                            <td>
+                                                <%= r.branch || '-' %>
+                                                <% if (r.year) { %> • Year <%= r.year %><% } %>
+                                                <% if (r.semester) { %> • Sem <%= r.semester %><% } %>
+                                            </td>
+                                            <td><%= r.status || '-' %></td>
+                                            <td>
+                                                <% if (r.status === 'Pending Faculty') { %>
+                                                    <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
+                                                        <input type="hidden" name="redirectPanel" value="objective-data" />
+                                                        <button type="submit" class="btn btn-accent">Approve</button>
+                                                    </form>
+                                                    <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
+                                                        <input type="hidden" name="redirectPanel" value="objective-data" />
+                                                        <button type="submit" class="btn btn-outline-primary">Deny</button>
+                                                    </form>
+                                                <% } else { %>
+                                                    <span class="muted">-</span>
+                                                <% } %>
+                                            </td>
+                                        </tr>
+                                        <% }); %>
+                                    </table>
+                                <% } %>
+                            </div>
+                        </details>
+                    <% }); %>
                 <% } %>
             </div>
         </div>
