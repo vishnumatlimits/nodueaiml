@@ -10,7 +10,7 @@
     <form method="POST" action="/login" class="stack">
       <label class="field">
         <span>Staff ID</span>
-        <input name="staffId" type="text" placeholder="FAC123" required />
+        <input name="staffId" type="text" placeholder="User ID" required />
       </label>
       <label class="field">
         <span>Password</span>
@@ -18,6 +18,13 @@
       </label>
       <button type="submit" class="btn btn-primary">Continue</button>
     </form>
+
+    <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px;">
+      <a href="/auth/microsoft" class="btn btn-outline-primary btn-ms">
+        <span class="ms-icon" aria-hidden="true"></span>
+        <span>Login with Microsoft</span>
+      </a>
+    </div>
   </div>
 </section>
 <%- include('partials/footer') %>

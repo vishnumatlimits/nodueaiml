@@ -69,6 +69,12 @@ body {
     line-height: 1.6;
 }
 
+html,
+body {
+    width: 100%;
+    overflow-x: hidden;
+}
+
 a {
     color: var(--accent);
     text-decoration: none;
@@ -101,8 +107,10 @@ h3 { font-size: 1.35rem; }
 
 /* Top Navigation Bar */
 .topbar {
-    position: sticky;
+    position: fixed;
     top: 0;
+    left: 0;
+    right: 0;
     z-index: 50;
     height: var(--topbar-height);
     display: flex;
@@ -135,8 +143,8 @@ h3 { font-size: 1.35rem; }
 }
 
 .brand-logo {
-    width: 170px;
-    height: 52px;
+    width: 290px;
+    height: 64px;
     object-fit: contain;
 }
 
@@ -186,8 +194,9 @@ h3 { font-size: 1.35rem; }
     flex-direction: column;
     padding: 32px 16px;
     flex-shrink: 0;
-    position: sticky;
+    position: fixed;
     top: var(--topbar-height);
+    left: 0;
     z-index: 40;
     border-right: 1px solid var(--primary-hover);
     height: calc(100vh - var(--topbar-height));
@@ -249,14 +258,14 @@ h3 { font-size: 1.35rem; }
 .content {
     flex: 1;
     padding: 40px 48px;
-    width: 100%;
-    margin: 0;
+    width: calc(100% - 280px);
+    margin-left: 280px;
     overflow-x: hidden;
 }
 
 /* Top-level page wrapper */
 main.page {
-    padding: 0;
+    padding: var(--topbar-height) 0 0;
     margin: 0;
     flex: 1;
     display: flex;
@@ -416,6 +425,21 @@ button:active, .btn-primary:active {
 .btn-outline-primary:hover {
     background: var(--primary);
     color: #fff;
+}
+
+.btn-ms {
+    gap: 10px;
+}
+
+.ms-icon {
+    width: 14px;
+    height: 14px;
+    display: inline-block;
+    background:
+        linear-gradient(#f25022 0 0) 0 0 / 48% 48% no-repeat,
+        linear-gradient(#7fba00 0 0) 100% 0 / 48% 48% no-repeat,
+        linear-gradient(#00a4ef 0 0) 0 100% / 48% 48% no-repeat,
+        linear-gradient(#ffb900 0 0) 100% 100% / 48% 48% no-repeat;
 }
 
 /* Danger */
@@ -645,6 +669,10 @@ tr:hover td {
    10. RESPONSIVE DESIGN
    ========================================= */
 @media (max-width: 768px) {
+    main.page {
+        padding-top: 0;
+    }
+
     .layout-wrap {
         flex-direction: column;
     }
@@ -654,10 +682,11 @@ tr:hover td {
         height: auto;
         position: relative;
         top: 0;
-        flex-direction: row;
-        overflow-x: auto;
+        left: auto;
+        flex-direction: column;
+        overflow-x: hidden;
         padding: 16px;
-        gap: 12px;
+        gap: 8px;
         border-right: none;
         border-bottom: 2px solid var(--accent);
     }
@@ -665,8 +694,9 @@ tr:hover td {
     .sidebar h2 { display: none; }
     
     .sidebar a {
-        padding: 8px 16px;
-        white-space: nowrap;
+        padding: 10px 12px;
+        white-space: normal;
+        overflow-wrap: anywhere;
         margin: 0;
         border-left: none;
         border-bottom: 3px solid transparent;
@@ -694,11 +724,17 @@ tr:hover td {
     }
     
     .topbar {
+        position: sticky;
         height: auto;
         padding: 16px 20px;
         flex-direction: column;
-        gap: 16px;
+        gap: 12px;
         align-items: center;
+    }
+
+    .content {
+        width: 100%;
+        margin-left: 0;
     }
 
     .brand-wrap {
@@ -707,11 +743,102 @@ tr:hover td {
     }
 
     .brand-logo {
-        width: 140px;
-        height: 44px;
+        width: 180px;
+        height: 56px;
+    }
+
+    .user-meta {
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        font-size: 0.82rem;
+    }
+
+    .topbar .link-btn,
+    .topbar button {
+        padding: 8px 12px;
+        font-size: 0.72rem;
+        letter-spacing: 0.01em;
+    }
+
+    table {
+        table-layout: fixed;
+    }
+
+    th,
+    td {
+        padding: 10px 6px;
+        font-size: 0.8rem;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    input,
+    select,
+    textarea,
+    .btn,
+    .link-btn,
+    button {
+        min-width: 0;
     }
     
     .grid.two {
         grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 420px) {
+    .content,
+    section.page {
+        padding: 16px 10px;
+    }
+
+    .card {
+        padding: 16px 10px;
+        margin-bottom: 16px;
+    }
+
+    .brand-logo {
+        width: 200px;
+        height: 80px;
+    }
+
+    .user-meta {
+        gap: 6px;
+        font-size: 0.75rem;
+    }
+
+    .topbar .link-btn,
+    .topbar button,
+    .btn,
+    .link-btn,
+    button {
+        padding: 6px 9px;
+        font-size: 0.66rem;
+        letter-spacing: 0;
+    }
+
+    h1 { font-size: 1.35rem; }
+    h2 { font-size: 1.1rem; }
+    h3 { font-size: 0.98rem; }
+
+    th,
+    td {
+        padding: 7px 4px;
+        font-size: 0.7rem;
+    }
+
+    input,
+    select,
+    textarea {
+        padding: 8px 9px;
+        font-size: 0.78rem;
+    }
+
+    .status-pill,
+    .badge {
+        padding: 4px 8px;
+        font-size: 0.62rem;
     }
 }

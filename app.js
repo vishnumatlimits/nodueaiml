@@ -5,11 +5,85 @@ const morgan = require('morgan');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
+const crypto = require('crypto');
+const { ConfidentialClientApplication } = require('@azure/msal-node');
 
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const ALLOWED_SSO_DOMAIN = 'mits.ac.in';
+const SESSION_SECRET = (process.env.SESSION_SECRET || '').trim() || crypto.randomBytes(48).toString('hex');
+
+if (!process.env.SESSION_SECRET) {
+  // eslint-disable-next-line no-console
+  console.warn('SESSION_SECRET is missing. Using temporary in-memory secret for this process.');
+}
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const getMsalClient = () => {
+  const clientId = (process.env.MS_CLIENT_ID || '').trim();
+  const clientSecret = (process.env.MS_CLIENT_SECRET || '').trim();
+  const tenantId = (process.env.MS_TENANT_ID || '').trim();
+  const redirectUri = (process.env.MS_REDIRECT_URI || '').trim();
+
+  if (!clientId || !clientSecret || !tenantId || !redirectUri) {
+    return null;
+  }
+
+  return new ConfidentialClientApplication({
+    auth: {
+      clientId,
+      authority: `https://login.microsoftonline.com/${tenantId}`,
+      clientSecret,
+    },
+  });
+};
+
+const getSsoEmailFromClaims = (claims = {}) => {
+  const candidates = [
+    claims.preferred_username,
+    claims.email,
+    claims.upn,
+  ];
+  return candidates.find((v) => typeof v === 'string' && v.trim()) || '';
+};
+
+const requestRateStore = new Map();
+const createSimpleRateLimiter = ({ keyPrefix, windowMs, maxRequests, errorMessage }) => (req, res, next) => {
+  const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+  const key = `${keyPrefix}:${ip}`;
+  const now = Date.now();
+  const windowStart = now - windowMs;
+
+  const existing = requestRateStore.get(key) || [];
+  const recent = existing.filter((ts) => ts > windowStart);
+
+  if (recent.length >= maxRequests) {
+    return res.status(429).render('staffLogin', {
+      error: errorMessage || 'Too many requests. Please try again later.',
+    });
+  }
+
+  recent.push(now);
+  requestRateStore.set(key, recent);
+  return next();
+};
+
+const loginRateLimiter = createSimpleRateLimiter({
+  keyPrefix: 'login',
+  windowMs: 10 * 60 * 1000,
+  maxRequests: 10,
+  errorMessage: 'Too many login attempts. Please wait 10 minutes and try again.',
+});
+
+const ssoCallbackRateLimiter = createSimpleRateLimiter({
+  keyPrefix: 'sso-callback',
+  windowMs: 10 * 60 * 1000,
+  maxRequests: 25,
+  errorMessage: 'Too many Microsoft SSO attempts. Please wait 10 minutes and try again.',
+});
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -22,9 +96,14 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(morgan('dev'));
 app.use(
   session({
-    secret: 'replace-this-secret',
+    secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+    },
   }),
 );
 
@@ -1101,7 +1180,107 @@ app.get('/login', (req, res) => {
   return res.render('staffLogin', { error: null });
 });
 
-app.post('/login', async (req, res) => {
+app.get('/auth/microsoft', async (req, res) => {
+  const msalClient = getMsalClient();
+  if (!msalClient) {
+    return res.status(500).render('staffLogin', {
+      error: 'Microsoft SSO is not configured. Contact administrator.',
+    });
+  }
+
+  try {
+    const state = crypto.randomBytes(16).toString('hex');
+    req.session.msAuthState = state;
+
+    const authCodeUrl = await msalClient.getAuthCodeUrl({
+      scopes: ['openid', 'profile', 'email', 'User.Read'],
+      redirectUri: (process.env.MS_REDIRECT_URI || '').trim(),
+      state,
+      prompt: 'select_account',
+    });
+
+    return res.redirect(authCodeUrl);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to start Microsoft SSO', err);
+    return res.status(500).render('staffLogin', {
+      error: 'Could not start Microsoft sign-in. Please try again.',
+    });
+  }
+});
+
+app.get('/auth/microsoft/callback', ssoCallbackRateLimiter, async (req, res) => {
+  const msalClient = getMsalClient();
+  if (!msalClient) {
+    return res.status(500).render('staffLogin', {
+      error: 'Microsoft SSO is not configured. Contact administrator.',
+    });
+  }
+
+  const receivedState = (req.query.state || '').toString();
+  const expectedState = (req.session.msAuthState || '').toString();
+  req.session.msAuthState = null;
+
+  if (!receivedState || !expectedState || receivedState !== expectedState) {
+    return res.status(400).render('staffLogin', {
+      error: 'Invalid SSO state. Please try signing in again.',
+    });
+  }
+
+  const authCode = (req.query.code || '').toString();
+  if (!authCode) {
+    return res.status(400).render('staffLogin', {
+      error: 'Microsoft sign-in failed. Authorization code missing.',
+    });
+  }
+
+  try {
+    const tokenResponse = await msalClient.acquireTokenByCode({
+      code: authCode,
+      scopes: ['openid', 'profile', 'email', 'User.Read'],
+      redirectUri: (process.env.MS_REDIRECT_URI || '').trim(),
+    });
+
+    const claims = tokenResponse?.idTokenClaims || {};
+    const email = getSsoEmailFromClaims(claims).trim();
+    const lowerEmail = email.toLowerCase();
+
+    if (!email || !lowerEmail.endsWith(`@${ALLOWED_SSO_DOMAIN}`)) {
+      return res.status(403).render('staffLogin', {
+        error: `Only @${ALLOWED_SSO_DOMAIN} accounts are allowed.`,
+      });
+    }
+
+    const facultyIdPrefix = lowerEmail.split('@')[0];
+    const faculty = await Faculty.findOne({
+      facultyId: { $regex: `^${escapeRegex(facultyIdPrefix)}$`, $options: 'i' },
+    }).lean();
+
+    if (!faculty) {
+      return res.status(403).render('staffLogin', {
+        error: 'No staff account found for this Microsoft email prefix.',
+      });
+    }
+
+    const role = faculty.role || 'faculty';
+    req.session.user = {
+      name: faculty.name,
+      facultyId: faculty.facultyId,
+      role,
+      email,
+    };
+
+    return res.redirect(role === 'hod' ? '/hod' : '/faculty');
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Microsoft SSO callback failed', err);
+    return res.status(500).render('staffLogin', {
+      error: 'Microsoft sign-in failed. Please try again.',
+    });
+  }
+});
+
+app.post('/login', loginRateLimiter, async (req, res) => {
   try {
     const staffId = (req.body.staffId || '').trim();
     const password = (req.body.password || '').trim();
