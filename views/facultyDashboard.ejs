@@ -143,15 +143,27 @@
                         <tr>
                             <th>Student</th>
                             <th>Roll number</th>
+                            <th>Department</th>
+                            <th>Section</th>
                             <th>Mentor subject</th>
                             <th>Branch / Year</th>
                             <th>Status</th>
                             <th>Action</th>
                         </tr>
-                        <% mentorSubjectRequests.forEach(function(r){ %>
+                        <% mentorSubjectRequestGroups.forEach(function(group){ %>
+                        <tr>
+                            <td colspan="8"><strong>Department: <%= group.department %></strong></td>
+                        </tr>
+                        <% group.sections.forEach(function(sectionGroup){ %>
+                        <tr>
+                            <td colspan="8"><span class="muted">Section: <%= sectionGroup.section %></span></td>
+                        </tr>
+                        <% sectionGroup.rows.forEach(function(r){ %>
                         <tr>
                             <td><%= r.studentName || '-' %></td>
                             <td><%= r.rollNumber || '-' %></td>
+                            <td><%= r.department || '-' %></td>
+                            <td><%= r.section || '-' %></td>
                             <td><%= r.subjectName || r.reason || '-' %></td>
                             <td>
                                 <%= r.branch || '-' %>
@@ -170,6 +182,8 @@
                                 </form>
                             </td>
                         </tr>
+                        <% }); %>
+                        <% }); %>
                         <% }); %>
                     </table>
                 <% } %>
@@ -332,6 +346,7 @@
                         <th>Roll number</th>
                         <th>Branch / Year</th>
                         <th>Department</th>
+                        <th>Section</th>
                         <th>Mentor subject</th>
                         <th>Status</th>
                     </tr>
@@ -345,6 +360,7 @@
                             <% if (r.semester) { %> • Sem <%= r.semester %><% } %>
                         </td>
                         <td><%= r.department || '-' %></td>
+                        <td><%= r.section || '-' %></td>
                         <td><%= r.subjectName || r.reason || '-' %></td>
                         <td>
                             <%= r.status || '-' %>

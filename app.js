@@ -50,6 +50,21 @@ const getSsoEmailFromClaims = (claims = {}) => {
   return candidates.find((v) => typeof v === 'string' && v.trim()) || '';
 };
 
+const resolveMsRedirectUri = (req) => {
+  const configured = (process.env.MS_REDIRECT_URI || '').trim();
+  if (configured && !configured.includes('localhost')) {
+    return configured;
+  }
+
+  const host = req?.get?.('host') || '';
+  const protocol = req?.protocol || 'https';
+  if (host) {
+    return `${protocol}://${host}/auth/microsoft/callback`;
+  }
+
+  return configured;
+};
+
 const requestRateStore = new Map();
 const createSimpleRateLimiter = ({ keyPrefix, windowMs, maxRequests, errorMessage }) => (req, res, next) => {
   const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
@@ -89,6 +104,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
+app.set('trust proxy', 1);
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -102,7 +118,7 @@ app.use(
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      secure: 'auto',
     },
   }),
 );
@@ -307,6 +323,44 @@ const compareRollNumbers = (a, b) => {
   const left = (a || '').toString().trim().toUpperCase();
   const right = (b || '').toString().trim().toUpperCase();
   return left.localeCompare(right, undefined, { numeric: false, sensitivity: 'base' });
+};
+
+const compareLabels = (a, b) => {
+  const left = (a || '').toString().trim();
+  const right = (b || '').toString().trim();
+  return left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' });
+};
+
+const groupMentorRequestsByDeptSection = (rows = []) => {
+  const deptMap = new Map();
+
+  rows.forEach((row) => {
+    const department = (row.department || '').toString().trim() || 'Unassigned Department';
+    const section = (row.section || '').toString().trim() || 'No Section';
+
+    if (!deptMap.has(department)) {
+      deptMap.set(department, new Map());
+    }
+
+    const sectionMap = deptMap.get(department);
+    if (!sectionMap.has(section)) {
+      sectionMap.set(section, []);
+    }
+
+    sectionMap.get(section).push(row);
+  });
+
+  return Array.from(deptMap.entries())
+    .sort((a, b) => compareLabels(a[0], b[0]))
+    .map(([department, sectionMap]) => ({
+      department,
+      sections: Array.from(sectionMap.entries())
+        .sort((a, b) => compareLabels(a[0], b[0]))
+        .map(([section, sectionRows]) => ({
+          section,
+          rows: sectionRows.slice().sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber)),
+        })),
+    }));
 };
 
 const pickBestMentorRequest = (rows = []) => {
@@ -905,8 +959,18 @@ const renderFacultyDashboard = async (req, res, extras = {}) => {
 
   // Mentor-specific objectives and mentor-subject requests
   const mentorRequests = myRequests.filter((r) => isMentorRequest(r));
-  const mentorSubjectRequests = mentorRequests.filter((r) => (r.subjectCode || '').startsWith('MENTOR::'));
+  const mentorSubjectRequests = mentorRequests
+    .filter((r) => (r.subjectCode || '').startsWith('MENTOR::'))
+    .slice()
+    .sort((a, b) => {
+      const deptDiff = compareLabels(a.department, b.department);
+      if (deptDiff !== 0) return deptDiff;
+      const sectionDiff = compareLabels(a.section, b.section);
+      if (sectionDiff !== 0) return sectionDiff;
+      return compareRollNumbers(a.rollNumber, b.rollNumber);
+    });
   const objectiveRequests = myRequests.filter((r) => isObjectiveRequest(r));
+  const mentorSubjectRequestGroups = groupMentorRequestsByDeptSection(mentorSubjectRequests);
 
   // Mentor subjects used for labelling mentor objective toggles
   let mentorSubjects = [];
@@ -996,6 +1060,7 @@ const renderFacultyDashboard = async (req, res, extras = {}) => {
     all: generalRequests,
     mentorRequests,
     mentorSubjectRequests,
+    mentorSubjectRequestGroups,
     objectiveRequests,
     objectiveApprovals,
     objectiveGroups,
@@ -1103,6 +1168,12 @@ const renderHodDashboard = async (req, res, extras = {}) => {
         isMentorRequest(r) &&
         ['Pending Faculty', 'Pending HOD'].includes(r.status)
       );
+    }).sort((a, b) => {
+      const deptDiff = compareLabels(a.department, b.department);
+      if (deptDiff !== 0) return deptDiff;
+      const sectionDiff = compareLabels(a.section, b.section);
+      if (sectionDiff !== 0) return sectionDiff;
+      return compareRollNumbers(a.rollNumber, b.rollNumber);
     });
 
     const pendingSubjectMap = new Map();
@@ -1140,6 +1211,7 @@ const renderHodDashboard = async (req, res, extras = {}) => {
     all: allRequests,
     pendingMentorRequests,
     hodMentorRequests,
+    hodMentorRequestGroups: groupMentorRequestsByDeptSection(hodMentorRequests),
     students,
     faculties,
     subjects,
@@ -1194,7 +1266,7 @@ app.get('/auth/microsoft', async (req, res) => {
 
     const authCodeUrl = await msalClient.getAuthCodeUrl({
       scopes: ['openid', 'profile', 'email', 'User.Read'],
-      redirectUri: (process.env.MS_REDIRECT_URI || '').trim(),
+      redirectUri: resolveMsRedirectUri(req),
       state,
       prompt: 'select_account',
     });
@@ -1238,7 +1310,7 @@ app.get('/auth/microsoft/callback', ssoCallbackRateLimiter, async (req, res) => 
     const tokenResponse = await msalClient.acquireTokenByCode({
       code: authCode,
       scopes: ['openid', 'profile', 'email', 'User.Read'],
-      redirectUri: (process.env.MS_REDIRECT_URI || '').trim(),
+      redirectUri: resolveMsRedirectUri(req),
     });
 
     const claims = tokenResponse?.idTokenClaims || {};
@@ -2096,7 +2168,6 @@ app.post('/faculty/requests/:id/:action', ensureRole('faculty', 'hod'), async (r
     console.error('Failed to load request for faculty action', err);
   }
   if (!request) return res.status(404).send('Request not found');
-  if (request.status !== 'Pending Faculty') return res.status(400).send('Request already processed');
 
   const mentorRequest = isMentorRequest(request);
   const objectiveRequest = isObjectiveRequest(request);
@@ -2215,10 +2286,10 @@ app.post('/hod/requests/:id/:action', ensureRole('hod'), async (req, res) => {
   if (!request) return res.status(404).send('Request not found');
   const mentorRequest = isMentorRequest(request);
   const ownedByHod = self && request.facultyId === self.facultyId;
-  const mentorAllowed = mentorRequest && ownedByHod && ['Pending Faculty', 'Pending HOD'].includes(request.status);
-  const legacyAllowed = !mentorRequest && request.status === 'Pending HOD';
+  const mentorAllowed = mentorRequest && ownedByHod;
+  const legacyAllowed = !mentorRequest;
   if (!mentorAllowed && !legacyAllowed) {
-    return res.status(400).send('Request already processed');
+    return res.status(403).send('Request not editable');
   }
 
   if (action === 'approve') {
@@ -3000,7 +3071,6 @@ app.post('/admin/requests/:id/:action', ensureRole('admin'), async (req, res) =>
     console.error('Failed to load request for admin action', err);
   }
   if (!request) return res.status(404).send('Request not found');
-  if (request.status !== 'Pending HOD') return res.status(400).send('Request already processed');
 
   if (action === 'approve') {
     request.status = 'Approved';
