@@ -70,6 +70,13 @@
                     <span class="badge"><%= subjectGroups && subjectGroups.length ? subjectGroups.length + ' subjects' : 'No subjects' %></span>
                 </div>
 
+                <div class="grid two" style="margin-top:12px;">
+                    <label class="field">
+                        <span>Search in subject approvals</span>
+                        <input type="text" id="faculty-subject-search" placeholder="Search by name, roll number, year, section, department" />
+                    </label>
+                </div>
+
                 <% if (!subjectGroups || !subjectGroups.length) { %>
                     <p class="muted">No subject-wise approvals available yet.</p>
                 <% } else { %>
@@ -82,15 +89,23 @@
                                     <tr>
                                         <th>S.No</th>
                                         <th>Roll Number</th>
+                                        <th>Name</th>
+                                        <th>Year</th>
+                                        <th>Section</th>
+                                        <th>Department</th>
                                         <th>Subject</th>
                                         <th>Assignment 1</th>
                                         <th>Assignment 2</th>
                                         <th>Remarks</th>
                                     </tr>
                                     <% group.rows.forEach(function(r, idx){ %>
-                                        <tr>
+                                        <tr class="faculty-subject-row" data-year="<%= r.year || '' %>" data-section="<%= r.section || '' %>" data-department="<%= r.department || '' %>">
                                             <td><%= idx + 1 %></td>
                                             <td><%= r.rollNumber || '-' %></td>
+                                            <td><%= r.studentName || '-' %></td>
+                                            <td><%= r.year || '-' %></td>
+                                            <td><%= r.section || '-' %></td>
+                                            <td><%= r.department || '-' %></td>
                                             <td><%= r.subjectName || group.subjectName %></td>
                                             <td style="text-align:center;">
                                                 <input type="checkbox" name="assignments[<%= r.id %>][assignment1]" <%= r.assignment1 ? 'checked' : '' %> />
@@ -128,6 +143,13 @@
                     <span class="badge"><%= mentorSubjectRequests && mentorSubjectRequests.length ? mentorSubjectRequests.length + ' requests' : 'No mentor requests' %></span>
                 </div>
 
+                <div class="grid two" style="margin-top:12px;">
+                    <label class="field">
+                        <span>Search in mentor approvals</span>
+                        <input type="text" id="faculty-mentor-search" placeholder="Search by name, roll number, year, section, department" />
+                    </label>
+                </div>
+
                 <div style="margin:10px 0 14px;display:flex;gap:8px;flex-wrap:wrap;">
                     <form action="/faculty/requests/approve-all" method="POST">
                         <input type="hidden" name="scope" value="mentor" />
@@ -143,6 +165,7 @@
                         <tr>
                             <th>Student</th>
                             <th>Roll number</th>
+                            <th>Year</th>
                             <th>Department</th>
                             <th>Section</th>
                             <th>Mentor subject</th>
@@ -151,17 +174,22 @@
                             <th>Action</th>
                         </tr>
                         <% mentorSubjectRequestGroups.forEach(function(group){ %>
-                        <tr>
-                            <td colspan="8"><strong>Department: <%= group.department %></strong></td>
+                        <tr class="faculty-mentor-group-row faculty-mentor-year-row">
+                            <td colspan="9"><strong>Year: <%= group.year %></strong></td>
                         </tr>
                         <% group.sections.forEach(function(sectionGroup){ %>
-                        <tr>
-                            <td colspan="8"><span class="muted">Section: <%= sectionGroup.section %></span></td>
+                        <tr class="faculty-mentor-group-row faculty-mentor-section-row">
+                            <td colspan="9"><span class="muted">Section: <%= sectionGroup.section %></span></td>
                         </tr>
-                        <% sectionGroup.rows.forEach(function(r){ %>
-                        <tr>
+                        <% sectionGroup.departments.forEach(function(deptGroup){ %>
+                        <tr class="faculty-mentor-group-row faculty-mentor-dept-row">
+                            <td colspan="9"><span class="muted">Department: <%= deptGroup.department %></span></td>
+                        </tr>
+                        <% deptGroup.rows.forEach(function(r){ %>
+                        <tr class="faculty-mentor-row" data-year="<%= r.year || '' %>" data-section="<%= r.section || '' %>" data-department="<%= r.department || '' %>">
                             <td><%= r.studentName || '-' %></td>
                             <td><%= r.rollNumber || '-' %></td>
+                            <td><%= r.year || '-' %></td>
                             <td><%= r.department || '-' %></td>
                             <td><%= r.section || '-' %></td>
                             <td><%= r.subjectName || r.reason || '-' %></td>
@@ -185,6 +213,7 @@
                         <% }); %>
                         <% }); %>
                         <% }); %>
+                        <% }); %>
                     </table>
                 <% } %>
             </div>
@@ -195,6 +224,13 @@
                 <div class="flex-between">
                     <h2 id="objective-data">Objective approvals</h2>
                     <span class="badge"><%= objectiveGroups && objectiveGroups.length ? objectiveGroups.length + ' objectives' : 'No objective approvals' %></span>
+                </div>
+
+                <div class="grid two" style="margin-top:12px;">
+                    <label class="field">
+                        <span>Search in objective approvals</span>
+                        <input type="text" id="faculty-objective-search" placeholder="Search by name, roll number, year, section, department" />
+                    </label>
                 </div>
 
                 <div style="margin:10px 0 14px;display:flex;gap:8px;flex-wrap:wrap;">
@@ -243,14 +279,20 @@
                                         <tr>
                                             <th>Student</th>
                                             <th>Roll number</th>
+                                            <th>Year</th>
+                                            <th>Section</th>
+                                            <th>Department</th>
                                             <th>Branch / Year</th>
                                             <th>Status</th>
                                             <th>Action</th>
                                         </tr>
                                         <% group.rows.forEach(function(r){ %>
-                                        <tr>
+                                        <tr class="faculty-objective-row" data-year="<%= r.year || '' %>" data-section="<%= r.section || '' %>" data-department="<%= r.department || '' %>">
                                             <td><%= r.studentName || '-' %></td>
                                             <td><%= r.rollNumber || '-' %></td>
+                                            <td><%= r.year || '-' %></td>
+                                            <td><%= r.section || '-' %></td>
+                                            <td><%= r.department || '-' %></td>
                                             <td>
                                                 <%= r.branch || '-' %>
                                                 <% if (r.year) { %> • Year <%= r.year %><% } %>
@@ -422,7 +464,38 @@
     const links = document.querySelectorAll('.sidebar a[data-target]');
     const panels = document.querySelectorAll('.panel');
     const bulkSubjectInput = document.getElementById('bulk-subject-code');
+    const subjectSearchInput = document.getElementById('faculty-subject-search');
+    const mentorSearchInput = document.getElementById('faculty-mentor-search');
+    const objectiveSearchInput = document.getElementById('faculty-objective-search');
     let currentSubject = null;
+
+    const wrapTablesForScroll = () => {
+        document.querySelectorAll('.content table').forEach((table) => {
+            if (table.closest('.table-responsive')) return;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'table-responsive';
+            table.parentNode.insertBefore(wrapper, table);
+            wrapper.appendChild(table);
+        });
+    };
+
+    const applySearch = (input, selector, afterFilter) => {
+        if (!input) return;
+
+        const update = () => {
+            const query = (input.value || '').trim().toLowerCase();
+            document.querySelectorAll(selector).forEach((row) => {
+                const text = (row.textContent || '').toLowerCase();
+                row.style.display = !query || text.includes(query) ? '' : 'none';
+            });
+            if (typeof afterFilter === 'function') {
+                afterFilter(query);
+            }
+        };
+
+        input.addEventListener('input', update);
+        update();
+    };
 
     const filterSubject = (subjectCode) => {
         const cards = document.querySelectorAll('.subject-group-card');
@@ -477,7 +550,7 @@
 
     // Department-wise mentee filter in "Mentees data" panel
     const menteeDeptChips = Array.from(document.querySelectorAll('.mentee-dept-chip'));
-    const menteeRows = Array.from(document.querySelectorAll('#mentee-table tbody tr'));
+    const menteeRows = Array.from(document.querySelectorAll('#mentee-table tr[data-dept]'));
     const filterMenteeDept = (dept) => {
         menteeRows.forEach((row) => {
             const rowDept = row.dataset.dept || '';
@@ -494,6 +567,28 @@
         });
         filterMenteeDept('__all');
     }
+
+    applySearch(subjectSearchInput, '.faculty-subject-row', () => {
+        document.querySelectorAll('.subject-group-card').forEach((card) => {
+            const rows = Array.from(card.querySelectorAll('.faculty-subject-row'));
+            const hasVisibleRows = rows.some((row) => row.style.display !== 'none');
+            card.style.display = hasVisibleRows ? '' : 'none';
+        });
+    });
+
+    applySearch(mentorSearchInput, '.faculty-mentor-row', (query) => {
+        document.querySelectorAll('.faculty-mentor-group-row').forEach((row) => {
+            row.style.display = query ? 'none' : '';
+        });
+    });
+
+    applySearch(objectiveSearchInput, '.faculty-objective-row', () => {
+        document.querySelectorAll('#objective-data details').forEach((detailsCard) => {
+            const rows = Array.from(detailsCard.querySelectorAll('.faculty-objective-row'));
+            const hasVisibleRows = rows.some((row) => row.style.display !== 'none');
+            detailsCard.style.display = hasVisibleRows ? '' : 'none';
+        });
+    });
 
     // On initial load, respect URL hash (e.g. /faculty#student-data)
     const hash = window.location.hash ? window.location.hash.substring(1) : '';
@@ -544,6 +639,8 @@
 
     // Default view when no hash: pending approvals
     activate('pending');
+
+    wrapTablesForScroll();
 
     // Helper function to show toast notification
     const showToast = (message, duration = 2000) => {

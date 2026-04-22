@@ -583,6 +583,7 @@ tr:hover td {
 
 .table-responsive {
     width: 100%;
+    max-width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     margin-top: 16px;
@@ -763,7 +764,21 @@ tr:hover td {
     }
 
     table {
-        table-layout: fixed;
+        table-layout: auto;
+    }
+
+    .table-responsive {
+        overflow-x: auto;
+    }
+
+    .table-responsive table {
+        min-width: 760px;
+        table-layout: auto;
+    }
+
+    .table-responsive th,
+    .table-responsive td {
+        white-space: nowrap;
     }
 
     th,
@@ -788,7 +803,17 @@ tr:hover td {
     }
 }
 
+@media (max-width: 1366px) {
+    .table-responsive table {
+        min-width: 880px;
+    }
+}
+
 @media (max-width: 420px) {
+    .table-responsive table {
+        min-width: 700px;
+    }
+
     .content,
     section.page {
         padding: 16px 10px;

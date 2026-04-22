@@ -331,34 +331,67 @@ const compareLabels = (a, b) => {
   return left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' });
 };
 
-const groupMentorRequestsByDeptSection = (rows = []) => {
-  const deptMap = new Map();
+const compareAcademicYear = (a, b) => {
+  const left = normalizeYearToken(a);
+  const right = normalizeYearToken(b);
+  const leftNum = Number(left);
+  const rightNum = Number(right);
+
+  if (!Number.isNaN(leftNum) && !Number.isNaN(rightNum)) {
+    return leftNum - rightNum;
+  }
+  return compareLabels(left, right);
+};
+
+const compareApprovalRows = (a, b) => {
+  const yearDiff = compareAcademicYear(a.year, b.year);
+  if (yearDiff !== 0) return yearDiff;
+  const sectionDiff = compareLabels(a.section, b.section);
+  if (sectionDiff !== 0) return sectionDiff;
+  const deptDiff = compareLabels(a.department, b.department);
+  if (deptDiff !== 0) return deptDiff;
+  return compareRollNumbers(a.rollNumber, b.rollNumber);
+};
+
+const groupMentorRequestsByYearSectionDepartment = (rows = []) => {
+  const yearMap = new Map();
 
   rows.forEach((row) => {
-    const department = (row.department || '').toString().trim() || 'Unassigned Department';
+    const year = (row.year || '').toString().trim() || 'No Year';
     const section = (row.section || '').toString().trim() || 'No Section';
+    const department = (row.department || '').toString().trim() || 'Unassigned Department';
 
-    if (!deptMap.has(department)) {
-      deptMap.set(department, new Map());
+    if (!yearMap.has(year)) {
+      yearMap.set(year, new Map());
     }
 
-    const sectionMap = deptMap.get(department);
+    const sectionMap = yearMap.get(year);
     if (!sectionMap.has(section)) {
-      sectionMap.set(section, []);
+      sectionMap.set(section, new Map());
     }
 
-    sectionMap.get(section).push(row);
+    const normalizedDeptMap = sectionMap.get(section);
+    if (!normalizedDeptMap.has(department)) {
+      normalizedDeptMap.set(department, []);
+    }
+
+    normalizedDeptMap.get(department).push(row);
   });
 
-  return Array.from(deptMap.entries())
-    .sort((a, b) => compareLabels(a[0], b[0]))
-    .map(([department, sectionMap]) => ({
-      department,
+  return Array.from(yearMap.entries())
+    .sort((a, b) => compareAcademicYear(a[0], b[0]))
+    .map(([year, sectionMap]) => ({
+      year,
       sections: Array.from(sectionMap.entries())
         .sort((a, b) => compareLabels(a[0], b[0]))
         .map(([section, sectionRows]) => ({
           section,
-          rows: sectionRows.slice().sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber)),
+          departments: Array.from(sectionRows.entries())
+            .sort((a, b) => compareLabels(a[0], b[0]))
+            .map(([department, departmentRows]) => ({
+              department,
+              rows: departmentRows.slice().sort(compareApprovalRows),
+            })),
         })),
     }));
 };
@@ -962,15 +995,9 @@ const renderFacultyDashboard = async (req, res, extras = {}) => {
   const mentorSubjectRequests = mentorRequests
     .filter((r) => (r.subjectCode || '').startsWith('MENTOR::'))
     .slice()
-    .sort((a, b) => {
-      const deptDiff = compareLabels(a.department, b.department);
-      if (deptDiff !== 0) return deptDiff;
-      const sectionDiff = compareLabels(a.section, b.section);
-      if (sectionDiff !== 0) return sectionDiff;
-      return compareRollNumbers(a.rollNumber, b.rollNumber);
-    });
+    .sort(compareApprovalRows);
   const objectiveRequests = myRequests.filter((r) => isObjectiveRequest(r));
-  const mentorSubjectRequestGroups = groupMentorRequestsByDeptSection(mentorSubjectRequests);
+  const mentorSubjectRequestGroups = groupMentorRequestsByYearSectionDepartment(mentorSubjectRequests);
 
   // Mentor subjects used for labelling mentor objective toggles
   let mentorSubjects = [];
@@ -1000,7 +1027,7 @@ const renderFacultyDashboard = async (req, res, extras = {}) => {
 
   const objectiveGroups = objectiveApprovals.map((objective) => {
     const code = `OBJECTIVE::${objective.code}`;
-    const rows = (objectiveRequestMap.get(code) || []).slice().sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber));
+    const rows = (objectiveRequestMap.get(code) || []).slice().sort(compareApprovalRows);
     return {
       code: objective.code,
       name: objective.name,
@@ -1021,7 +1048,7 @@ const renderFacultyDashboard = async (req, res, extras = {}) => {
       name: r.subjectName || r.reason || 'Objective',
       facultyId: r.facultyId || self.facultyId,
       years: [],
-      rows: (objectiveRequestMap.get(key) || []).slice().sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber)),
+      rows: (objectiveRequestMap.get(key) || []).slice().sort(compareApprovalRows),
     });
   });
 
@@ -1044,11 +1071,7 @@ const renderFacultyDashboard = async (req, res, extras = {}) => {
     .sort((a, b) => (a.subjectCode || '').localeCompare(b.subjectCode || ''));
 
   subjectGroups.forEach((group) => {
-    group.rows.sort((a, b) => {
-      const ra = (a.rollNumber || '').toString();
-      const rb = (b.rollNumber || '').toString();
-      return ra.localeCompare(rb);
-    });
+    group.rows.sort(compareApprovalRows);
   });
 
   const payload = {
@@ -1116,16 +1139,14 @@ const renderHodDashboard = async (req, res, extras = {}) => {
     );
 
     subjectGroups.forEach((group) => {
-      group.rows.sort((a, b) => {
-        return compareRollNumbers(a.rollNumber, b.rollNumber);
-      });
+      group.rows.sort(compareApprovalRows);
     });
 
     hodSubjectGroups = subjectGroups.map((group) => {
       const pendingRows = group.rows.filter((r) => r.status !== 'Approved');
       return {
         ...group,
-        pendingRows: pendingRows.slice().sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber)),
+        pendingRows: pendingRows.slice().sort(compareApprovalRows),
         pendingCount: pendingRows.length,
         totalCount: group.rows.length,
       };
@@ -1168,13 +1189,7 @@ const renderHodDashboard = async (req, res, extras = {}) => {
         isMentorRequest(r) &&
         ['Pending Faculty', 'Pending HOD'].includes(r.status)
       );
-    }).sort((a, b) => {
-      const deptDiff = compareLabels(a.department, b.department);
-      if (deptDiff !== 0) return deptDiff;
-      const sectionDiff = compareLabels(a.section, b.section);
-      if (sectionDiff !== 0) return sectionDiff;
-      return compareRollNumbers(a.rollNumber, b.rollNumber);
-    });
+    }).sort(compareApprovalRows);
 
     const pendingSubjectMap = new Map();
     pendingRequests.forEach((r) => {
@@ -1211,7 +1226,7 @@ const renderHodDashboard = async (req, res, extras = {}) => {
     all: allRequests,
     pendingMentorRequests,
     hodMentorRequests,
-    hodMentorRequestGroups: groupMentorRequestsByDeptSection(hodMentorRequests),
+    hodMentorRequestGroups: groupMentorRequestsByYearSectionDepartment(hodMentorRequests),
     students,
     faculties,
     subjects,

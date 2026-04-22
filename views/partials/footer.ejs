@@ -1,4 +1,23 @@
     </main>
     <footer class="footer">NoDue - Department of CSE (AI & ML) © 2026, Designed and Developed by Vishnu Vardhan Naidu - 24695A4006</footer>
+    <script>
+      (() => {
+        const ensureTableScrollWrappers = () => {
+          document.querySelectorAll('table').forEach((table) => {
+            if (table.closest('.table-responsive')) return;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'table-responsive';
+            table.parentNode.insertBefore(wrapper, table);
+            wrapper.appendChild(table);
+          });
+        };
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', ensureTableScrollWrappers);
+        } else {
+          ensureTableScrollWrappers();
+        }
+      })();
+    </script>
   </body>
 </html>

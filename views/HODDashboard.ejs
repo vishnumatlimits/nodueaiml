@@ -58,6 +58,13 @@
 					<span class="badge"><%= hodSubjectGroups && hodSubjectGroups.length ? hodSubjectGroups.length + ' subjects' : 'No subjects' %></span>
 				</div>
 
+				<div class="grid two" style="margin-top:12px;">
+					<label class="field">
+						<span>Search in subject approvals</span>
+						<input type="text" id="hod-subject-search" placeholder="Search by name, roll number, year, section, department" />
+					</label>
+				</div>
+
 				<% if (!hodSubjectGroups || !hodSubjectGroups.length) { %>
 					<p class="muted">No assigned subjects available yet.</p>
 				<% } else { %>
@@ -82,16 +89,22 @@
 													<th>S.No</th>
 													<th>Roll Number</th>
 													<th>Student Name</th>
+													<th>Year</th>
+													<th>Section</th>
+													<th>Department</th>
 													<th>Assignment 1</th>
 													<th>Assignment 2</th>
 													<th>Status</th>
 													<th>Remarks</th>
 												</tr>
 												<% group.rows.forEach(function(r, idx){ %>
-													<tr>
+													<tr class="hod-subject-row" data-year="<%= r.year || '' %>" data-section="<%= r.section || '' %>" data-department="<%= r.department || '' %>">
 														<td><%= idx + 1 %></td>
 														<td><%= r.rollNumber || '-' %></td>
 														<td><%= r.studentName || '-' %></td>
+														<td><%= r.year || '-' %></td>
+														<td><%= r.section || '-' %></td>
+														<td><%= r.department || '-' %></td>
 														<td style="text-align:center;">
 															<input type="checkbox" name="assignments[<%= r.id %>][assignment1]" <%= r.assignment1 ? 'checked' : '' %> />
 														</td>
@@ -131,6 +144,13 @@
 					<span class="badge"><%= hodMentorRequests && hodMentorRequests.length ? hodMentorRequests.length + ' pending' : 'No pending mentee requests' %></span>
 				</div>
 
+				<div class="grid two" style="margin-top:12px;">
+					<label class="field">
+						<span>Search in mentee approvals</span>
+						<input type="text" id="hod-mentor-search" placeholder="Search by name, roll number, year, section, department" />
+					</label>
+				</div>
+
 				<div style="display:flex; gap:10px; flex-wrap:wrap; margin:12px 0 16px;">
 					<form action="/hod/requests/generate-mentor-subjects" method="POST">
 						<button type="submit" class="btn btn-outline-primary">Create mentor requests</button>
@@ -151,6 +171,7 @@
 						<tr>
 							<th>Student</th>
 							<th>Roll number</th>
+							<th>Year</th>
 							<th>Department</th>
 							<th>Section</th>
 							<th>Mentor subject</th>
@@ -159,17 +180,22 @@
 							<th>Action</th>
 						</tr>
 						<% hodMentorRequestGroups.forEach(function(group){ %>
-							<tr>
-								<td colspan="8"><strong>Department: <%= group.department %></strong></td>
+							<tr class="hod-mentor-group-row hod-mentor-year-row">
+								<td colspan="9"><strong>Year: <%= group.year %></strong></td>
 							</tr>
 							<% group.sections.forEach(function(sectionGroup){ %>
-								<tr>
-									<td colspan="8"><span class="muted">Section: <%= sectionGroup.section %></span></td>
+								<tr class="hod-mentor-group-row hod-mentor-section-row">
+									<td colspan="9"><span class="muted">Section: <%= sectionGroup.section %></span></td>
 								</tr>
-								<% sectionGroup.rows.forEach(function(r){ %>
-							<tr>
+								<% sectionGroup.departments.forEach(function(deptGroup){ %>
+								<tr class="hod-mentor-group-row hod-mentor-dept-row">
+									<td colspan="9"><span class="muted">Department: <%= deptGroup.department %></span></td>
+								</tr>
+								<% deptGroup.rows.forEach(function(r){ %>
+							<tr class="hod-mentor-row" data-year="<%= r.year || '' %>" data-section="<%= r.section || '' %>" data-department="<%= r.department || '' %>">
 								<td><%= r.studentName || '-' %></td>
 								<td><%= r.rollNumber || '-' %></td>
+								<td><%= r.year || '-' %></td>
 								<td><%= r.department || '-' %></td>
 								<td><%= r.section || '-' %></td>
 								<td><%= r.subjectName || r.reason || '-' %></td>
@@ -182,6 +208,7 @@
 									</form>
 								</td>
 							</tr>
+								<% }); %>
 								<% }); %>
 							<% }); %>
 						<% }); %>
@@ -234,12 +261,19 @@
 						<select name="department" required>
 							<option value="">Select department</option>
 							<option value="CSM">CSM</option>
-							<option value="CSN">CSN</option>
+							<option value="CSD">CSD</option>
+							<option value="CSE">CSC</option>
+							<option value="CAI">CAI</option>
 							<option value="CSE">CSE</option>
 							<option value="ECE">ECE</option>
 							<option value="ME">ME</option>
 							<option value="Civil">Civil</option>
 							<option value="EEE">EEE</option>
+							<option value="Physics">Physics</option>
+							<option value="Chemistry">Chemistry</option>
+							<option value="Mathematics">Mathematics</option>
+							<option value="Humanities">Humanities</option>
+							<option value="Other">Other</option>
 						</select>
 					</label>
 				</div>
@@ -268,12 +302,20 @@
 						<td>
 							<select form="<%= formId %>" name="department" required>
 								<option value="CSM" <%= f.department === 'CSM' ? 'selected' : '' %>>CSM</option>
+								<option value="CSD" <%= f.department === 'CSD' ? 'selected' : '' %>>CSD</option>
+								<option value="CAI" <%= f.department === 'CAI' ? 'selected' : '' %>>CAI</option>
 								<option value="CSN" <%= f.department === 'CSN' ? 'selected' : '' %>>CSN</option>
 								<option value="CSE" <%= f.department === 'CSE' ? 'selected' : '' %>>CSE</option>
+								<option value="CSC" <%= f.department === 'CSC' ? 'selected' : '' %>>CSC</option>
 								<option value="ECE" <%= f.department === 'ECE' ? 'selected' : '' %>>ECE</option>
 								<option value="ME" <%= f.department === 'ME' ? 'selected' : '' %>>ME</option>
 								<option value="Civil" <%= f.department === 'Civil' ? 'selected' : '' %>>Civil</option>
 								<option value="EEE" <%= f.department === 'EEE' ? 'selected' : '' %>>EEE</option>
+								<option value="Humanities" <%= f.department === 'Humanities' ? 'selected' : '' %>>Humanities</option>
+								<option value="Physics" <%= f.department === 'Physics' ? 'selected' : '' %>>Physics</option>
+								<option value="Chemistry" <%= f.department === 'Chemistry' ? 'selected' : '' %>>Chemistry</option>
+								<option value="Mathematics" <%= f.department === 'Mathematics' ? 'selected' : '' %>>Mathematics</option>
+								<option value="Other" <%= f.department === 'Other' ? 'selected' : '' %>>Other</option>
 							</select>
 						</td>
 						<td><input form="<%= formId %>" name="password" type="password" placeholder="New password (optional)" /></td>
@@ -833,6 +875,13 @@
 					</div>
 					<p class="muted" style="margin-top:8px;">Create objective approvals like NASSCOM. Each objective is assigned to one faculty, and each student needs one approval for that objective.</p>
 
+					<div class="grid two" style="margin-top:12px;">
+						<label class="field">
+							<span>Search objective approvals</span>
+							<input type="text" id="hod-objective-search" placeholder="Search by objective name or faculty" />
+						</label>
+					</div>
+
 					<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
 						<form action="/hod/requests/generate-objective-approvals" method="POST">
 							<button type="submit" class="btn btn-outline-primary">Generate objective requests for students</button>
@@ -881,7 +930,7 @@
 						</tr>
 						<% if (objectiveApprovals && objectiveApprovals.length) { %>
 							<% objectiveApprovals.forEach(function(obj){ const faculty = faculties.find((f) => f.facultyId === obj.facultyId); %>
-							<tr>
+							<tr class="hod-objective-row">
 								<td><%= obj.name %></td>
 								<td>
 									<%= faculty ? faculty.name : (obj.facultyId || '-') %>
@@ -1029,12 +1078,19 @@
 							<span>Department</span>
 							<select name="department">
 								<option value="CSM">CSM</option>
-								<option value="CSN">CSN</option>
+								<option value="CSD">CSD</option>
+								<option value="CSE">CSC</option>
+								<option value="CAI">CAI</option>
 								<option value="CSE">CSE</option>
 								<option value="ECE">ECE</option>
 								<option value="ME">ME</option>
 								<option value="Civil">Civil</option>
 								<option value="EEE">EEE</option>
+								<option value="Physics">Physics</option>
+								<option value="Chemistry">Chemistry</option>
+								<option value="Mathematics">Mathematics</option>
+								<option value="Humanities">Humanities</option>
+								<option value="Other">Other</option>
 							</select>
 						</label>
 						<label class="field">
@@ -1059,6 +1115,37 @@
 (() => {
 	const links = Array.from(document.querySelectorAll('[data-target]'));
 	const panels = Array.from(document.querySelectorAll('[data-panel]'));
+	const hodSubjectSearchInput = document.getElementById('hod-subject-search');
+	const hodMentorSearchInput = document.getElementById('hod-mentor-search');
+	const hodObjectiveSearchInput = document.getElementById('hod-objective-search');
+
+	const wrapTablesForScroll = () => {
+		document.querySelectorAll('.content table').forEach((table) => {
+			if (table.closest('.table-responsive')) return;
+			const wrapper = document.createElement('div');
+			wrapper.className = 'table-responsive';
+			table.parentNode.insertBefore(wrapper, table);
+			wrapper.appendChild(table);
+		});
+	};
+
+	const applySearch = (input, rowSelector, afterFilter) => {
+		if (!input) return;
+
+		const update = () => {
+			const query = (input.value || '').trim().toLowerCase();
+			document.querySelectorAll(rowSelector).forEach((row) => {
+				const text = (row.textContent || '').toLowerCase();
+				row.style.display = !query || text.includes(query) ? '' : 'none';
+			});
+			if (typeof afterFilter === 'function') {
+				afterFilter(query);
+			}
+		};
+
+		input.addEventListener('input', update);
+		update();
+	};
 	const getActivePanelName = () => {
 		const activePanel = document.querySelector('.panel.active[data-panel]');
 		return activePanel ? activePanel.dataset.panel : '';
@@ -1274,6 +1361,23 @@
 	studentSearchInput?.addEventListener('input', updateStudentFilter);
 	studentDeptFilter?.addEventListener('change', updateStudentFilter);
 	updateStudentFilter();
+
+	applySearch(hodSubjectSearchInput, '.hod-subject-row', () => {
+		document.querySelectorAll('.subject-group-card').forEach((card) => {
+			const rows = Array.from(card.querySelectorAll('.hod-subject-row'));
+			const hasVisibleRows = rows.some((row) => row.style.display !== 'none');
+			card.style.display = hasVisibleRows ? '' : 'none';
+		});
+	});
+
+	applySearch(hodMentorSearchInput, '.hod-mentor-row', (query) => {
+		document.querySelectorAll('.hod-mentor-group-row').forEach((row) => {
+			row.style.display = query ? 'none' : '';
+		});
+	});
+	applySearch(hodObjectiveSearchInput, '.hod-objective-row');
+
+	wrapTablesForScroll();
 
 	// Helper function to show toast notification
 	const showToast = (message, duration = 2000) => {
