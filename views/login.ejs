@@ -7,10 +7,10 @@
     <% if (searchError) { %>
       <div class="alert"><%= searchError %></div>
     <% } %>
-    <form method="POST" action="/student/search" class="stack">
+    <form method="POST" action="/student/search" class="stack" id="student-search-form">
       <label class="field">
         <span>Roll number</span>
-        <input name="rollNumber" type="text" placeholder="e.g., 22CSE045" required />
+        <input id="student-roll-input" name="rollNumber" type="text" placeholder="e.g., 22CSE045" required />
       </label>
       <button type="submit" class="btn btn-accent">Search</button>
     </form>
@@ -178,6 +178,18 @@
 
 <script>
 (() => {
+  const studentSearchForm = document.getElementById('student-search-form');
+  const studentRollInput = document.getElementById('student-roll-input');
+  if (studentSearchForm && studentRollInput) {
+    studentRollInput.addEventListener('input', () => {
+      studentRollInput.value = (studentRollInput.value || '').toUpperCase();
+    });
+
+    studentSearchForm.addEventListener('submit', () => {
+      studentRollInput.value = (studentRollInput.value || '').trim().toUpperCase();
+    });
+  }
+
   // Auto-refresh student search results
   const rollNumberDisplay = document.querySelector('section.page h2');
   if (!rollNumberDisplay) return; // No search results displayed
