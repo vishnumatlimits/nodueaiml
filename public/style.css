@@ -491,6 +491,33 @@ tr:hover td {
     background: #F1F4F9;
 }
 
+.faculty-mentor-year-row td,
+.hod-mentor-year-row td {
+    background: #eaf2ff;
+    font-weight: 700;
+}
+
+.faculty-mentor-section-row td,
+.hod-mentor-section-row td {
+    background: #f6f2ff;
+    font-weight: 600;
+}
+
+.faculty-mentor-dept-row td,
+.hod-mentor-dept-row td {
+    background: #eefaf2;
+    font-weight: 600;
+}
+
+.faculty-mentor-year-row td,
+.faculty-mentor-section-row td,
+.faculty-mentor-dept-row td,
+.hod-mentor-year-row td,
+.hod-mentor-section-row td,
+.hod-mentor-dept-row td {
+    border-color: rgba(13, 27, 42, 0.08);
+}
+
 /* =========================================
    8. UTILITIES & STATUS INDICATORS
    ========================================= */

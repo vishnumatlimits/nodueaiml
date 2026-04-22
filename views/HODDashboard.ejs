@@ -82,6 +82,22 @@
 									<% if (!group.rows.length) { %>
 										<p class="muted">No requests available for this subject.</p>
 									<% } else { %>
+										<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-bottom:10px;">
+											<form action="/faculty/requests/approve-all" method="POST">
+												<input type="hidden" name="scope" value="subject" />
+												<input type="hidden" name="subjectCode" value="<%= group.subjectCode || '' %>" />
+												<input type="hidden" name="bulkAction" value="approve" />
+												<input type="hidden" name="redirectPanel" value="hod-subject-data" />
+												<button type="submit" class="btn btn-accent btn-sm">Approve all</button>
+											</form>
+											<form action="/faculty/requests/approve-all" method="POST">
+												<input type="hidden" name="scope" value="subject" />
+												<input type="hidden" name="subjectCode" value="<%= group.subjectCode || '' %>" />
+												<input type="hidden" name="bulkAction" value="revoke" />
+												<input type="hidden" name="redirectPanel" value="hod-subject-data" />
+												<button type="submit" class="btn btn-outline-primary btn-sm">Revoke all</button>
+											</form>
+										</div>
 										<form action="/faculty/requests/bulk-assignments" method="POST">
 											<input type="hidden" name="subjectCode" value="<%= group.subjectCode || '' %>" />
 											<table>
@@ -839,18 +855,29 @@
 										<input type="text" name="name" placeholder="e.g., Student achievements" required />
 									</label>
 								</div>
+								<fieldset>
+									<legend style="font-weight:600; margin-bottom:8px;">Applicable years</legend>
+									<p class="muted" style="margin-bottom:8px;">Leave all unchecked for all years.</p>
+									<div style="display:flex;gap:12px;flex-wrap:wrap;">
+										<label><input type="checkbox" name="years" value="II" /> II year</label>
+										<label><input type="checkbox" name="years" value="III" /> III year</label>
+										<label><input type="checkbox" name="years" value="IV" /> IV year</label>
+									</div>
+								</fieldset>
 								<button type="submit" class="btn btn-accent">Add mentor subject</button>
 							</form>
 
 							<table style="margin-top:12px;">
 								<tr>
 									<th>Name</th>
+									<th>Applicable years</th>
 									<th>Delete</th>
 								</tr>
 								<% if (mentorSubjects && mentorSubjects.length) { %>
 									<% mentorSubjects.forEach(function(ms){ %>
 									<tr>
 										<td><%= ms.name %></td>
+										<td><%= (ms.years && ms.years.length) ? ms.years.join(', ') : 'All years' %></td>
 										<td>
 											<form action="/hod/mentor-subjects/<%= ms._id %>/delete" method="POST" onsubmit="return confirm('Delete this mentor subject?');">
 												<button type="submit" class="btn btn-danger">Delete</button>

@@ -80,11 +80,29 @@
                 <% if (!subjectGroups || !subjectGroups.length) { %>
                     <p class="muted">No subject-wise approvals available yet.</p>
                 <% } else { %>
-                    <form action="/faculty/requests/bulk-assignments" method="POST">
+                    <div class="faculty-bulk-assignments">
                         <input type="hidden" name="subjectCode" id="bulk-subject-code" value="" />
                         <% subjectGroups.forEach(function(group){ %>
                             <div class="card subject-group-card" data-subject="<%= group.subjectCode %>" style="margin-top:16px;">
-                                <h3><%= group.subjectName %> <small style="font-weight:400;color:#6b7280;">(<%= group.subjectCode || 'Code N/A' %>)</small></h3>
+                                <div class="flex-between" style="gap:12px;align-items:flex-start;flex-wrap:wrap;">
+                                    <h3><%= group.subjectName %> <small style="font-weight:400;color:#6b7280;">(<%= group.subjectCode || 'Code N/A' %>)</small></h3>
+                                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                        <form action="/faculty/requests/approve-all" method="POST">
+                                            <input type="hidden" name="scope" value="subject" />
+                                            <input type="hidden" name="subjectCode" value="<%= group.subjectCode || '' %>" />
+                                            <input type="hidden" name="bulkAction" value="approve" />
+                                            <input type="hidden" name="redirectPanel" value="student-data" />
+                                            <button type="submit" class="btn btn-accent btn-sm">Approve all</button>
+                                        </form>
+                                        <form action="/faculty/requests/approve-all" method="POST">
+                                            <input type="hidden" name="scope" value="subject" />
+                                            <input type="hidden" name="subjectCode" value="<%= group.subjectCode || '' %>" />
+                                            <input type="hidden" name="bulkAction" value="revoke" />
+                                            <input type="hidden" name="redirectPanel" value="student-data" />
+                                            <button type="submit" class="btn btn-outline-primary btn-sm">Revoke all</button>
+                                        </form>
+                                    </div>
+                                </div>
                                 <table>
                                     <tr>
                                         <th>S.No</th>
@@ -129,9 +147,9 @@
                         <% }); %>
                         <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center;">
                             <p style="color:#6b7280;font-size:0.9rem;margin:0;"><em>Auto-saves on each change</em></p>
-                            <button type="submit" class="btn btn-accent">Save all (Manual backup)</button>
+                            <span class="muted">Manual backup is handled by auto-save</span>
                         </div>
-                    </form>
+                    </div>
                 <% } %>
             </div>
         </div>
@@ -663,7 +681,7 @@
     };
 
     // AUTO-SAVE: Submit checkbox changes automatically via AJAX (Bulk assignments)
-    const bulkForm = document.querySelector('form[action="/faculty/requests/bulk-assignments"]');
+    const bulkForm = document.querySelector('.faculty-bulk-assignments');
     if (bulkForm) {
         const checkboxes = bulkForm.querySelectorAll('input[type="checkbox"]');
         const textInputs = bulkForm.querySelectorAll('input[type="text"][name*="facultyNote"]');

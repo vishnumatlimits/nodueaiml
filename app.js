@@ -236,6 +236,7 @@ const mentorSubjectSchema = new mongoose.Schema(
   {
     code: { type: String, required: true, unique: true, trim: true },
     name: { type: String, required: true, trim: true },
+    years: [{ type: String, trim: true }],
   },
   { timestamps: true },
 );
@@ -307,6 +308,16 @@ const isObjectiveRequest = (request) => {
   const reason = request?.reason || '';
   const subjectCode = request?.subjectCode || '';
   return reason.startsWith('Objective approval:') || subjectCode.startsWith('OBJECTIVE::');
+};
+
+const isStudentInApplicableYears = (studentYear, allowedYears) => {
+  if (!Array.isArray(allowedYears) || !allowedYears.length) return true;
+  const sy = normalizeYearToken(studentYear);
+  if (!sy) return false;
+  const allowed = allowedYears
+    .map((y) => normalizeYearToken(y))
+    .filter(Boolean);
+  return allowed.includes(sy);
 };
 
 const normalizeYearToken = (value) => {
@@ -442,15 +453,7 @@ const redirectToHodPanel = (req, fallbackPanel = 'hod-subject-data') => {
   return `/hod#${panel}`;
 };
 
-const isStudentInObjectiveYears = (studentYear, objectiveYears) => {
-  if (!Array.isArray(objectiveYears) || !objectiveYears.length) return true;
-  const sy = normalizeYearToken(studentYear);
-  if (!sy) return false;
-  const allowed = objectiveYears
-    .map((y) => normalizeYearToken(y))
-    .filter(Boolean);
-  return allowed.includes(sy);
-};
+const isStudentInObjectiveYears = (studentYear, objectiveYears) => isStudentInApplicableYears(studentYear, objectiveYears);
 
 const ensureObjectiveRequestsForObjective = async (objective) => {
   if (!objective || !objective.code || !objective.facultyId) return;
@@ -734,8 +737,12 @@ const ensureMentorRequestsForFaculty = async (facultyId) => {
         section: stu.section || '',
       };
 
+      const applicableMentorSubjects = mentorSubjects.filter((mentorSubject) =>
+        isStudentInApplicableYears(stu.year, mentorSubject.years),
+      );
+
       if (hasMentorSubjects) {
-        for (const mentorSubject of mentorSubjects) {
+        for (const mentorSubject of applicableMentorSubjects) {
           const mentorSubjectCode = `MENTOR::${mentorSubject.code}`;
           const mentorReason = `Mentor objective: ${mentorSubject.code}`;
 
@@ -756,6 +763,18 @@ const ensureMentorRequestsForFaculty = async (facultyId) => {
             },
             { upsert: true, new: true, setDefaultsOnInsert: true },
           );
+        }
+
+        const inapplicableMentorSubjects = mentorSubjects.filter(
+          (mentorSubject) => !isStudentInApplicableYears(stu.year, mentorSubject.years),
+        );
+        for (const mentorSubject of inapplicableMentorSubjects) {
+          // eslint-disable-next-line no-await-in-loop
+          await Request.deleteOne({
+            rollNumber: stu.rollNumber,
+            facultyId,
+            subjectCode: `MENTOR::${mentorSubject.code}`,
+          });
         }
       } else {
         // Backward-compatible fallback when no mentor subjects are defined.
@@ -1535,7 +1554,8 @@ app.post('/student/search', async (req, res) => {
       console.error('Failed to load mentor subjects for student view', err);
     }
 
-    const mentorSubjectCodes = mentorSubjects.map((m) => `MENTOR::${m.code}`);
+    const applicableMentorSubjects = mentorSubjects.filter((m) => isStudentInApplicableYears(student.year, m.years));
+    const mentorSubjectCodes = applicableMentorSubjects.map((m) => `MENTOR::${m.code}`);
     const mentorSubjectRequests = mentorSubjectCodes.length
       ? await Request.find({
         rollNumber,
@@ -1574,7 +1594,7 @@ app.post('/student/search', async (req, res) => {
         mentorName = mentor ? mentor.name : null;
       }
 
-      const objectives = mentorSubjects.map((ms) => {
+      const objectives = applicableMentorSubjects.map((ms) => {
         const reqForObjective = mentorRequestMap.get(`MENTOR::${ms.code}`);
         const status = reqForObjective && reqForObjective.status
           ? reqForObjective.status
@@ -1735,7 +1755,8 @@ app.post('/api/student/search-status', async (req, res) => {
       console.error('Failed to load mentor subjects for student view', err);
     }
 
-    const mentorSubjectCodes = mentorSubjects.map((m) => `MENTOR::${m.code}`);
+    const applicableMentorSubjects = mentorSubjects.filter((m) => isStudentInApplicableYears(student.year, m.years));
+    const mentorSubjectCodes = applicableMentorSubjects.map((m) => `MENTOR::${m.code}`);
     const mentorSubjectRequests = mentorSubjectCodes.length
       ? await Request.find({
         rollNumber,
@@ -1774,7 +1795,7 @@ app.post('/api/student/search-status', async (req, res) => {
         mentorName = mentor ? mentor.name : null;
       }
 
-      const objectives = mentorSubjects.map((ms) => {
+      const objectives = applicableMentorSubjects.map((ms) => {
         const reqForObjective = mentorRequestMap.get(`MENTOR::${ms.code}`);
         const status = reqForObjective && reqForObjective.status
           ? reqForObjective.status
@@ -2231,8 +2252,12 @@ app.post('/faculty/requests/approve-all', ensureRole('faculty', 'hod'), async (r
   const scope = (req.body.scope || '').trim();
   const redirectPanel = (req.body.redirectPanel || '').trim();
   const objectiveCode = (req.body.objectiveCode || '').trim();
-  const allowedPanels = new Set(['mentor-subject-data', 'objective-data', 'mentee-data']);
+  const allowedPanels = new Set(['mentor-subject-data', 'objective-data', 'mentee-data', 'student-data', 'hod-subject-data']);
   const targetPanel = allowedPanels.has(redirectPanel) ? redirectPanel : 'pending';
+  const subjectCode = (req.body.subjectCode || '').trim();
+  const bulkAction = (req.body.bulkAction || 'approve').trim();
+  const isHodUser = req.session?.user?.role === 'hod';
+  const dashboardBase = isHodUser ? '/hod' : '/faculty';
 
   const self = await loadCurrentFaculty(req);
   if (!self || !self.facultyId) {
@@ -2280,13 +2305,43 @@ app.post('/faculty/requests/approve-all', ensureRole('faculty', 'hod'), async (r
           },
         },
       );
+    } else if (scope === 'subject' && subjectCode) {
+      const filter = {
+        ...baseFilter,
+        subjectCode,
+      };
+      if (bulkAction === 'revoke') {
+        await Request.updateMany(
+          filter,
+          {
+            $set: {
+              status: 'Pending Faculty',
+              facultyNote: '',
+              assignment1: false,
+              assignment2: false,
+            },
+          },
+        );
+      } else {
+        await Request.updateMany(
+          filter,
+          {
+            $set: {
+              status: 'Approved',
+              facultyNote: 'Approved by faculty (bulk)',
+              assignment1: true,
+              assignment2: true,
+            },
+          },
+        );
+      }
     }
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('Failed to bulk approve faculty requests', err);
   }
 
-  return res.redirect(`/faculty#${targetPanel}`);
+  return res.redirect(`${dashboardBase}#${targetPanel}`);
 });
 
 app.get('/hod', ensureRole('hod'), async (req, res) => renderHodDashboard(req, res));
@@ -3009,9 +3064,14 @@ app.post('/hod/mentors/assign', ensureRole('hod'), async (req, res) => {
 // Manage mentor subjects (common to all mentors)
 app.post('/hod/mentor-subjects', ensureRole('hod'), async (req, res) => {
   const rawName = (req.body.name || '').trim();
+  const yearsRaw = req.body.years;
   if (!rawName) {
     return res.redirect(redirectToHodPanel(req, 'manage-mentors'));
   }
+
+  const years = Array.isArray(yearsRaw)
+    ? yearsRaw.map((y) => (y || '').trim()).filter(Boolean)
+    : ((yearsRaw || '').trim() ? [(yearsRaw || '').trim()] : []);
 
   // Auto-generate an internal code from the name
   let code = rawName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -3022,7 +3082,7 @@ app.post('/hod/mentor-subjects', ensureRole('hod'), async (req, res) => {
   try {
     await MentorSubject.findOneAndUpdate(
       { code },
-      { code, name: rawName },
+      { code, name: rawName, years },
       { upsert: true, new: true, setDefaultsOnInsert: true },
     );
   } catch (err) {
@@ -3035,6 +3095,10 @@ app.post('/hod/mentor-subjects', ensureRole('hod'), async (req, res) => {
 app.post('/hod/mentor-subjects/:id/delete', ensureRole('hod'), async (req, res) => {
   const { id } = req.params;
   try {
+    const mentorSubject = await MentorSubject.findById(id).lean();
+    if (mentorSubject && mentorSubject.code) {
+      await Request.deleteMany({ subjectCode: `MENTOR::${mentorSubject.code}` });
+    }
     await MentorSubject.deleteOne({ _id: id });
   } catch (err) {
     // eslint-disable-next-line no-console
