@@ -4,7 +4,7 @@
 <div class="layout-wrap">
     <aside class="sidebar">
         <h2>Faculty</h2>
-        <a href="#pending" data-target="pending" class="active">Pending approvals</a>
+        <a href="#pending" data-target="pending" class="active">Dashboard</a>
         <a href="#student-data" data-target="student-data">Subject-wise approvals</a>
         <a href="#mentor-subject-data" data-target="mentor-subject-data">Mentor approvals</a>
         <a href="#objective-data" data-target="objective-data">Objective approvals</a>
@@ -14,7 +14,7 @@
                     <h2 style="margin-top:16px;font-size:0.9rem;opacity:0.85;">Your subjects</h2>
                     <% subjectGroups.forEach(function(group){ %>
                         <a href="#student-data" data-target="student-data" data-subject="<%= group.subjectCode %>">
-                            <%= group.subjectCode %>
+                            <%= group.subjectCode %><%= group.subjectName ? ' — ' + group.subjectName : '' %>
                         </a>
                     <% }); %>
                 <% } %>
@@ -26,40 +26,107 @@
     <section class="content stack">
         <div class="panel active" data-panel="pending">
             <div class="flex-between">
-                <h1 id="pending">Pending approvals</h1>
-                <span class="badge"><%= pending.length %> waiting</span>
+                <h1 id="pending">Approvals analytics</h1>
+                <span class="badge"><%= (facultyAnalytics && facultyAnalytics.overall ? facultyAnalytics.overall.actionablePending : pending.length) %> actionable pending</span>
             </div>
 
-            <div class="card">
-                <% if (!pending.length) { %>
-                <p class="muted">No requests need your review.</p>
-                <% } else { %>
-                <table>
-                    <tr>
-                        <th>Student</th>
-                        <th>Department</th>
-                        <th>Reason</th>
-                        <th>Actions</th>
-                    </tr>
-                    <% pending.forEach((r) => { %>
-                    <tr>
-                        <td><%= r.studentName %></td>
-                        <td><%= r.department %></td>
-                        <td><%= r.reason %></td>
-                        <td>
-                            <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
-                                <input type="hidden" name="redirectPanel" value="pending" />
-                                <button type="submit" class="btn btn-accent">Approve</button>
-                            </form>
-                            <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
-                                <input type="hidden" name="redirectPanel" value="pending" />
-                                <button type="submit" class="btn btn-outline-primary">Deny</button>
-                            </form>
-                        </td>
-                    </tr>
-                    <% }); %>
-                </table>
-                <% } %>
+            <div class="card" style="margin-top:12px;">
+                <% const analytics = facultyAnalytics || { overall: { total: 0, students: 0, approved: 0, pending: 0, denied: 0, actionablePending: 0, approvalRate: 0 }, categories: [] }; %>
+                <div class="grid two" style="gap:12px;">
+                    <div class="card" style="margin:0;padding:14px;">
+                        <p class="muted" style="margin:0 0 4px;">Total approval records</p>
+                        <h2 style="margin:0;"><%= analytics.overall.total %></h2>
+                    </div>
+                    <div class="card" style="margin:0;padding:14px;">
+                        <p class="muted" style="margin:0 0 4px;">Total students (category-wise sum)</p>
+                        <h2 style="margin:0;"><%= analytics.overall.students %></h2>
+                    </div>
+                    <div class="card" style="margin:0;padding:14px;">
+                        <p class="muted" style="margin:0 0 4px;">Approved</p>
+                        <h2 style="margin:0;color:#0f766e;"><%= analytics.overall.approved %></h2>
+                    </div>
+                    <div class="card" style="margin:0;padding:14px;">
+                        <p class="muted" style="margin:0 0 4px;">Pending your action</p>
+                        <h2 style="margin:0;color:#b45309;"><%= analytics.overall.actionablePending %></h2>
+                    </div>
+                </div>
+
+                <div class="grid two" style="gap:14px;margin-top:14px;">
+                    <div class="card" style="margin:0;padding:14px;">
+                        <h3 style="margin:0 0 10px;">Overall approval split (<%= analytics.overall.approvalRate %>%)</h3>
+                        <canvas id="faculty-overall-pie" width="220" height="220" style="max-width:220px;"></canvas>
+                        <div class="muted" id="faculty-overall-legend" style="margin-top:10px;"></div>
+                    </div>
+                    <div class="card" style="margin:0;padding:14px;">
+                        <h3 style="margin:0 0 10px;">Category workload split</h3>
+                        <canvas id="faculty-category-pie" width="220" height="220" style="max-width:220px;"></canvas>
+                        <div class="muted" id="faculty-category-legend" style="margin-top:10px;"></div>
+                    </div>
+                </div>
+
+                <div style="margin-top:14px;">
+                    <table>
+                        <tr>
+                            <th>Category</th>
+                            <th>Total records</th>
+                            <th>Total students</th>
+                            <th>Approved</th>
+                            <th>Pending</th>
+                            <th>Denied</th>
+                            <th>Actionable pending</th>
+                            <th>Approval %</th>
+                        </tr>
+                        <% analytics.categories.forEach(function(c){ %>
+                            <tr>
+                                <td><%= c.label %></td>
+                                <td><%= c.total %></td>
+                                <td><%= c.students %></td>
+                                <td><%= c.approved %></td>
+                                <td><%= c.pending %></td>
+                                <td><%= c.denied %></td>
+                                <td><%= c.actionablePending %></td>
+                                <td><%= c.approvalRate %>%</td>
+                            </tr>
+                        <% }); %>
+                    </table>
+                </div>
+
+                <details style="margin-top:14px;">
+                    <summary style="cursor:pointer;font-weight:600;">Open actionable pending list (<%= pending.length %>)</summary>
+                    <% if (!pending.length) { %>
+                        <p class="muted" style="margin-top:10px;">No general pending requests require review right now.</p>
+                    <% } else { %>
+                        <div style="margin-top:10px;">
+                            <table>
+                                <tr>
+                                    <th>Student</th>
+                                    <th>Department</th>
+                                    <th>Reason</th>
+                                    <th>Actions</th>
+                                </tr>
+                                <% pending.forEach((r) => { %>
+                                <tr>
+                                    <td><%= r.studentName %></td>
+                                    <td><%= r.department %></td>
+                                    <td><%= r.reason %></td>
+                                    <td>
+                                        <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
+                                            <input type="hidden" name="redirectPanel" value="pending" />
+                                            <button type="submit" class="btn btn-accent">Approve</button>
+                                        </form>
+                                        <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
+                                            <input type="hidden" name="redirectPanel" value="pending" />
+                                            <button type="submit" class="btn btn-outline-primary">Deny</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                <% }); %>
+                            </table>
+                        </div>
+                    <% } %>
+                </details>
+
+                <script id="faculty-analytics-data" type="application/json"><%- JSON.stringify(analytics) %></script>
             </div>
         </div>
 
@@ -111,7 +178,6 @@
                                         <th>Year</th>
                                         <th>Section</th>
                                         <th>Department</th>
-                                        <th>Subject</th>
                                         <th>Assignment 1</th>
                                         <th>Assignment 2</th>
                                         <th>Remarks</th>
@@ -124,7 +190,6 @@
                                             <td><%= r.year || '-' %></td>
                                             <td><%= r.section || '-' %></td>
                                             <td><%= r.department || '-' %></td>
-                                            <td><%= r.subjectName || group.subjectName %></td>
                                             <td style="text-align:center;">
                                                 <input type="checkbox" name="assignments[<%= r.id %>][assignment1]" <%= r.assignment1 ? 'checked' : '' %> />
                                             </td>
@@ -179,60 +244,78 @@
                 <% if (!mentorSubjectRequests || !mentorSubjectRequests.length) { %>
                     <p class="muted">No mentor subject requests pending for your mentees.</p>
                 <% } else { %>
-                    <table>
-                        <tr>
-                            <th>Student</th>
-                            <th>Roll number</th>
-                            <th>Year</th>
-                            <th>Department</th>
-                            <th>Section</th>
-                            <th>Mentor subject</th>
-                            <th>Branch / Year</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                        <% mentorSubjectRequestGroups.forEach(function(group){ %>
-                        <tr class="faculty-mentor-group-row faculty-mentor-year-row">
-                            <td colspan="9"><strong>Year: <%= group.year %></strong></td>
-                        </tr>
-                        <% group.sections.forEach(function(sectionGroup){ %>
-                        <tr class="faculty-mentor-group-row faculty-mentor-section-row">
-                            <td colspan="9"><span class="muted">Section: <%= sectionGroup.section %></span></td>
-                        </tr>
-                        <% sectionGroup.departments.forEach(function(deptGroup){ %>
-                        <tr class="faculty-mentor-group-row faculty-mentor-dept-row">
-                            <td colspan="9"><span class="muted">Department: <%= deptGroup.department %></span></td>
-                        </tr>
-                        <% deptGroup.rows.forEach(function(r){ %>
-                        <tr class="faculty-mentor-row" data-year="<%= r.year || '' %>" data-section="<%= r.section || '' %>" data-department="<%= r.department || '' %>">
-                            <td><%= r.studentName || '-' %></td>
-                            <td><%= r.rollNumber || '-' %></td>
-                            <td><%= r.year || '-' %></td>
-                            <td><%= r.department || '-' %></td>
-                            <td><%= r.section || '-' %></td>
-                            <td><%= r.subjectName || r.reason || '-' %></td>
-                            <td>
-                                <%= r.branch || '-' %>
-                                <% if (r.year) { %> • Year <%= r.year %><% } %>
-                                <% if (r.semester) { %> • Sem <%= r.semester %><% } %>
-                            </td>
-                            <td><%= r.status || '-' %></td>
-                            <td>
-                                <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
-                                    <input type="hidden" name="redirectPanel" value="mentor-subject-data" />
-                                    <button type="submit" class="btn btn-accent">Approve</button>
-                                </form>
-                                <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
-                                    <input type="hidden" name="redirectPanel" value="mentor-subject-data" />
-                                    <button type="submit" class="btn btn-outline-primary">Deny</button>
-                                </form>
-                            </td>
-                        </tr>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 14px;">
+                        <button type="button" class="btn btn-outline-primary mentor-subject-chip active" data-mentor-subject="__all">All subjects</button>
+                        <% mentorSubjectRequestGroups.forEach(function(subjectGroup){ const subjectFilter = subjectGroup.subjectCode || subjectGroup.subjectName; %>
+                            <button type="button" class="btn btn-outline-primary mentor-subject-chip" data-mentor-subject="<%= subjectFilter %>">
+                                <%= subjectGroup.subjectName || subjectGroup.subjectCode || 'Mentor Subject' %>
+                            </button>
                         <% }); %>
+                    </div>
+
+                    <div class="stack" style="gap:14px;">
+                        <% mentorSubjectRequestGroups.forEach(function(subjectGroup){ const subjectFilter = subjectGroup.subjectCode || subjectGroup.subjectName; %>
+                            <details class="card mentor-subject-card" data-mentor-subject="<%= subjectFilter %>" style="margin:0;">
+                                <summary class="flex-between" style="gap:10px;align-items:flex-start;cursor:pointer;list-style:none;">
+                                    <h3 style="margin:0;"><%= subjectGroup.subjectName || subjectGroup.subjectCode || '-' %></h3>
+                                    <span class="badge"> <%= subjectGroup.years.length %> year group(s)</span>
+                                </summary>
+
+                                <div class="stack" style="margin-top:12px;gap:12px;">
+                                    <% subjectGroup.years.forEach(function(group){ %>
+                                        <div class="card mentor-year-card" style="margin:0;padding:14px;">
+                                            <h4 style="margin:0 0 10px;">Year: <%= group.year %></h4>
+
+                                            <div class="stack" style="gap:10px;">
+                                                <% group.sections.forEach(function(sectionGroup){ %>
+                                                    <div class="card mentor-section-card" style="margin:0;padding:12px;">
+                                                        <div class="muted" style="font-weight:600;margin-bottom:8px;">Section: <%= sectionGroup.section %></div>
+
+                                                        <% sectionGroup.departments.forEach(function(deptGroup){ %>
+                                                            <div class="muted" style="margin:6px 0;font-weight:600;">Department: <%= deptGroup.department %></div>
+                                                            <table style="margin-top:6px;">
+                                                                <tr>
+                                                                    <th>Student</th>
+                                                                    <th>Roll number</th>
+                                                                    <th>Branch / Year</th>
+                                                                    <th>Status</th>
+                                                                    <th>Action</th>
+                                                                </tr>
+                                                                <% deptGroup.rows.forEach(function(r){ %>
+                                                                <tr class="faculty-mentor-row" data-request-id="<%= r.id %>" data-year="<%= r.year || '' %>" data-section="<%= r.section || '' %>" data-department="<%= r.department || '' %>" data-mentor-subject="<%= subjectFilter %>">
+                                                                    <td><%= r.studentName || '-' %></td>
+                                                                    <td><%= r.rollNumber || '-' %></td>
+                                                                    <td>
+                                                                        <%= r.branch || '-' %>
+                                                                        <% if (r.year) { %> • Year <%= r.year %><% } %>
+                                                                        <% if (r.semester) { %> • Sem <%= r.semester %><% } %>
+                                                                    </td>
+                                                                    <td><%= r.status || '-' %></td>
+                                                                    <td>
+                                                                        <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
+                                                                            <input type="hidden" name="redirectPanel" value="mentor-subject-data" />
+                                                                            <input type="hidden" name="focusRequest" value="<%= r.id %>" />
+                                                                            <button type="submit" class="btn btn-accent">Approve</button>
+                                                                        </form>
+                                                                        <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
+                                                                            <input type="hidden" name="redirectPanel" value="mentor-subject-data" />
+                                                                            <input type="hidden" name="focusRequest" value="<%= r.id %>" />
+                                                                            <button type="submit" class="btn btn-outline-primary">Deny</button>
+                                                                        </form>
+                                                                    </td>
+                                                                </tr>
+                                                                <% }); %>
+                                                            </table>
+                                                        <% }); %>
+                                                    </div>
+                                                <% }); %>
+                                            </div>
+                                        </div>
+                                    <% }); %>
+                                </div>
+                            </details>
                         <% }); %>
-                        <% }); %>
-                        <% }); %>
-                    </table>
+                    </div>
                 <% } %>
             </div>
         </div>
@@ -263,22 +346,23 @@
                     <p class="muted">No objective approvals are assigned to you right now.</p>
                 <% } else { %>
                     <div style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 14px;">
+                        <button type="button" class="btn btn-outline-primary objective-chip active" data-objective="__all">All objectives</button>
                         <% objectiveGroups.forEach(function(group){ %>
-                            <a href="#objective-<%= group.code %>" class="btn btn-outline-primary btn-sm" style="text-decoration:none;">
+                            <button type="button" class="btn btn-outline-primary btn-sm objective-chip" data-objective="<%= group.code %>">
                                 <%= group.name %>
                                 <span class="badge" style="margin-left:6px;"><%= group.rows.length %></span>
-                            </a>
+                            </button>
                         <% }); %>
                     </div>
 
                     <% objectiveGroups.forEach(function(group){ %>
-                        <details class="card" id="objective-<%= group.code %>" style="margin-top:12px;">
-                            <summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                        <details class="card objective-group-card" id="objective-<%= group.code %>" data-objective="<%= group.code %>" style="margin-top:12px;">
+                            <summary class="flex-between" style="cursor:pointer;list-style:none;gap:12px;align-items:flex-start;flex-wrap:wrap;">
                                 <span>
                                     <strong><%= group.name %></strong>
-                                    <% if (group.code) { %><span class="muted"> — <%= group.code.replace('OBJECTIVE::', '') %></span><% } %>
+                                    <% if (group.code) { %><span class="muted" style="margin-left:6px;"><%= group.code.replace('OBJECTIVE::', '') %></span><% } %>
                                 </span>
-                                <span style="display:flex;gap:8px;align-items:center;">
+                                <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                                     <span class="badge"><%= group.rows.length %> students</span>
                                     <form action="/faculty/requests/approve-all" method="POST" style="display:inline;">
                                         <input type="hidden" name="scope" value="objective" />
@@ -293,47 +377,59 @@
                                 <% if (!group.rows.length) { %>
                                     <p class="muted">No students mapped yet.</p>
                                 <% } else { %>
-                                    <table>
-                                        <tr>
-                                            <th>Student</th>
-                                            <th>Roll number</th>
-                                            <th>Year</th>
-                                            <th>Section</th>
-                                            <th>Department</th>
-                                            <th>Branch / Year</th>
-                                            <th>Status</th>
-                                            <th>Action</th>
-                                        </tr>
-                                        <% group.rows.forEach(function(r){ %>
-                                        <tr class="faculty-objective-row" data-year="<%= r.year || '' %>" data-section="<%= r.section || '' %>" data-department="<%= r.department || '' %>">
-                                            <td><%= r.studentName || '-' %></td>
-                                            <td><%= r.rollNumber || '-' %></td>
-                                            <td><%= r.year || '-' %></td>
-                                            <td><%= r.section || '-' %></td>
-                                            <td><%= r.department || '-' %></td>
-                                            <td>
-                                                <%= r.branch || '-' %>
-                                                <% if (r.year) { %> • Year <%= r.year %><% } %>
-                                                <% if (r.semester) { %> • Sem <%= r.semester %><% } %>
-                                            </td>
-                                            <td><%= r.status || '-' %></td>
-                                            <td>
-                                                <% if (r.status === 'Pending Faculty') { %>
-                                                    <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
-                                                        <input type="hidden" name="redirectPanel" value="objective-data" />
-                                                        <button type="submit" class="btn btn-accent">Approve</button>
-                                                    </form>
-                                                    <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
-                                                        <input type="hidden" name="redirectPanel" value="objective-data" />
-                                                        <button type="submit" class="btn btn-outline-primary">Deny</button>
-                                                    </form>
-                                                <% } else { %>
-                                                    <span class="muted">-</span>
-                                                <% } %>
-                                            </td>
-                                        </tr>
+                                    <% const groupedRows = group.groupedRows || []; %>
+                                    <div class="stack" style="gap:12px;">
+                                        <% groupedRows.forEach(function(yearGroup){ %>
+                                            <div class="card objective-year-card" style="margin:0;padding:14px;">
+                                                <h4 style="margin:0 0 10px;">Year: <%= yearGroup.year %></h4>
+                                                <div class="stack" style="gap:10px;">
+                                                    <% yearGroup.sections.forEach(function(sectionGroup){ %>
+                                                        <div class="card objective-section-card" style="margin:0;padding:12px;">
+                                                            <div class="muted" style="font-weight:600;margin-bottom:8px;">Section: <%= sectionGroup.section %></div>
+                                                            <% sectionGroup.departments.forEach(function(deptGroup){ %>
+                                                                <div class="card objective-department-card" style="margin:0 0 8px;padding:10px;">
+                                                                    <div class="muted" style="margin:0 0 8px;font-weight:600;">Department: <%= deptGroup.department %></div>
+                                                                    <table class="objective-department-table" style="margin-top:4px;">
+                                                                        <tr>
+                                                                            <th>Student</th>
+                                                                            <th>Roll number</th>
+                                                                            <th>Branch / Year</th>
+                                                                            <th>Status</th>
+                                                                            <th>Action</th>
+                                                                        </tr>
+                                                                        <% deptGroup.rows.forEach(function(r){ %>
+                                                                        <tr class="faculty-objective-row" data-request-id="<%= r.id %>" data-year="<%= r.year || '' %>" data-section="<%= r.section || '' %>" data-department="<%= r.department || '' %>">
+                                                                            <td><%= r.studentName || '-' %></td>
+                                                                            <td><%= r.rollNumber || '-' %></td>
+                                                                            <td>
+                                                                                <%= r.branch || '-' %>
+                                                                                <% if (r.year) { %> • Year <%= r.year %><% } %>
+                                                                                <% if (r.semester) { %> • Sem <%= r.semester %><% } %>
+                                                                            </td>
+                                                                            <td><%= r.status || '-' %></td>
+                                                                            <td>
+                                                                                <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
+                                                                                    <input type="hidden" name="redirectPanel" value="objective-data" />
+                                                                                    <input type="hidden" name="focusRequest" value="<%= r.id %>" />
+                                                                                    <button type="submit" class="btn btn-accent">Approve</button>
+                                                                                </form>
+                                                                                <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
+                                                                                    <input type="hidden" name="redirectPanel" value="objective-data" />
+                                                                                    <input type="hidden" name="focusRequest" value="<%= r.id %>" />
+                                                                                    <button type="submit" class="btn btn-outline-primary">Deny</button>
+                                                                                </form>
+                                                                            </td>
+                                                                        </tr>
+                                                                        <% }); %>
+                                                                    </table>
+                                                                </div>
+                                                            <% }); %>
+                                                        </div>
+                                                    <% }); %>
+                                                </div>
+                                            </div>
                                         <% }); %>
-                                    </table>
+                                    </div>
                                 <% } %>
                             </div>
                         </details>
@@ -485,7 +581,105 @@
     const subjectSearchInput = document.getElementById('faculty-subject-search');
     const mentorSearchInput = document.getElementById('faculty-mentor-search');
     const objectiveSearchInput = document.getElementById('faculty-objective-search');
+    const mentorSubjectChips = Array.from(document.querySelectorAll('.mentor-subject-chip'));
+    const mentorSubjectCards = Array.from(document.querySelectorAll('.mentor-subject-card'));
+    const objectiveChips = Array.from(document.querySelectorAll('.objective-chip'));
+    const objectiveCards = Array.from(document.querySelectorAll('.objective-group-card'));
     let currentSubject = null;
+    let currentMentorSubject = '__all';
+    let currentObjective = '__all';
+    const analyticsDataNode = document.getElementById('faculty-analytics-data');
+    let analyticsData = null;
+
+    if (analyticsDataNode && analyticsDataNode.textContent) {
+        try {
+            analyticsData = JSON.parse(analyticsDataNode.textContent);
+        } catch (err) {
+            analyticsData = null;
+        }
+    }
+
+    const renderPieChart = (canvasId, legendId, segments) => {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas || !Array.isArray(segments) || !segments.length) return;
+
+        const total = segments.reduce((sum, segment) => sum + (segment.value || 0), 0);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const width = canvas.width;
+        const height = canvas.height;
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const radius = Math.min(centerX, centerY) - 10;
+
+        ctx.clearRect(0, 0, width, height);
+
+        if (!total) {
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#e5e7eb';
+            ctx.fill();
+            ctx.closePath();
+
+            const legend = document.getElementById(legendId);
+            if (legend) legend.textContent = 'No data available yet.';
+            return;
+        }
+
+        let startAngle = -Math.PI / 2;
+        segments.forEach((segment) => {
+            const value = segment.value || 0;
+            if (!value) return;
+            const sliceAngle = (value / total) * Math.PI * 2;
+
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.arc(centerX, centerY, radius, startAngle, startAngle + sliceAngle);
+            ctx.closePath();
+            ctx.fillStyle = segment.color;
+            ctx.fill();
+
+            startAngle += sliceAngle;
+        });
+
+        // Donut hole for readability
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius * 0.52, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.closePath();
+
+        const legend = document.getElementById(legendId);
+        if (legend) {
+            legend.innerHTML = segments
+                .filter((segment) => (segment.value || 0) > 0)
+                .map((segment) => {
+                    const pct = Math.round(((segment.value || 0) / total) * 100);
+                    return `<span style="display:inline-flex;align-items:center;gap:6px;margin-right:12px;"><span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:${segment.color};"></span>${segment.label}: ${segment.value} (${pct}%)</span>`;
+                })
+                .join('');
+        }
+    };
+
+    const renderAnalyticsCharts = () => {
+        if (!analyticsData || !analyticsData.overall) return;
+
+        renderPieChart('faculty-overall-pie', 'faculty-overall-legend', [
+            { label: 'Approved', value: analyticsData.overall.approved || 0, color: '#0f766e' },
+            { label: 'Pending', value: analyticsData.overall.pending || 0, color: '#f59e0b' },
+            { label: 'Denied', value: analyticsData.overall.denied || 0, color: '#dc2626' },
+        ]);
+
+        const categoryPalette = ['#2563eb', '#7c3aed', '#0891b2', '#ca8a04', '#16a34a', '#be123c'];
+        const categorySegments = (analyticsData.categories || []).map((category, idx) => ({
+            label: category.label || 'Category',
+            value: category.total || 0,
+            color: categoryPalette[idx % categoryPalette.length],
+        }));
+
+        renderPieChart('faculty-category-pie', 'faculty-category-legend', categorySegments);
+    };
 
     const wrapTablesForScroll = () => {
         document.querySelectorAll('.content table').forEach((table) => {
@@ -586,6 +780,44 @@
         filterMenteeDept('__all');
     }
 
+    const filterMentorSubjectCards = (subjectKey) => {
+        currentMentorSubject = subjectKey || '__all';
+        mentorSubjectCards.forEach((card) => {
+            const cardSubject = card.getAttribute('data-mentor-subject') || '';
+            card.style.display = currentMentorSubject === '__all' || cardSubject === currentMentorSubject ? '' : 'none';
+        });
+    };
+
+    if (mentorSubjectChips.length && mentorSubjectCards.length) {
+        mentorSubjectChips.forEach((chip) => {
+            chip.addEventListener('click', () => {
+                const subjectKey = chip.dataset.mentorSubject || '__all';
+                mentorSubjectChips.forEach((c) => c.classList.toggle('active', c === chip));
+                filterMentorSubjectCards(subjectKey);
+            });
+        });
+        filterMentorSubjectCards('__all');
+    }
+
+    const filterObjectiveCards = (objectiveKey) => {
+        currentObjective = objectiveKey || '__all';
+        objectiveCards.forEach((card) => {
+            const cardObjective = card.getAttribute('data-objective') || '';
+            card.style.display = currentObjective === '__all' || cardObjective === currentObjective ? '' : 'none';
+        });
+    };
+
+    if (objectiveChips.length && objectiveCards.length) {
+        objectiveChips.forEach((chip) => {
+            chip.addEventListener('click', () => {
+                const objectiveKey = chip.dataset.objective || '__all';
+                objectiveChips.forEach((c) => c.classList.toggle('active', c === chip));
+                filterObjectiveCards(objectiveKey);
+            });
+        });
+        filterObjectiveCards('__all');
+    }
+
     applySearch(subjectSearchInput, '.faculty-subject-row', () => {
         document.querySelectorAll('.subject-group-card').forEach((card) => {
             const rows = Array.from(card.querySelectorAll('.faculty-subject-row'));
@@ -594,17 +826,59 @@
         });
     });
 
-    applySearch(mentorSearchInput, '.faculty-mentor-row', (query) => {
-        document.querySelectorAll('.faculty-mentor-group-row').forEach((row) => {
-            row.style.display = query ? 'none' : '';
+    applySearch(mentorSearchInput, '.faculty-mentor-row', () => {
+        document.querySelectorAll('.mentor-section-card').forEach((sectionCard) => {
+            const tables = Array.from(sectionCard.querySelectorAll('table'));
+            tables.forEach((table) => {
+                const rows = Array.from(table.querySelectorAll('.faculty-mentor-row'));
+                const hasVisibleRows = rows.some((row) => row.style.display !== 'none');
+                table.style.display = hasVisibleRows ? '' : 'none';
+            });
+
+            const anyVisibleTable = tables.some((table) => table.style.display !== 'none');
+            sectionCard.style.display = anyVisibleTable ? '' : 'none';
+        });
+
+        document.querySelectorAll('.mentor-year-card').forEach((yearCard) => {
+            const sections = Array.from(yearCard.querySelectorAll('.mentor-section-card'));
+            const hasVisibleSections = sections.some((section) => section.style.display !== 'none');
+            yearCard.style.display = hasVisibleSections ? '' : 'none';
+        });
+
+        mentorSubjectCards.forEach((subjectCard) => {
+            const years = Array.from(subjectCard.querySelectorAll('.mentor-year-card'));
+            const hasVisibleYears = years.some((year) => year.style.display !== 'none');
+            const subjectMatch = currentMentorSubject === '__all'
+                || (subjectCard.getAttribute('data-mentor-subject') || '') === currentMentorSubject;
+            subjectCard.style.display = hasVisibleYears && subjectMatch ? '' : 'none';
         });
     });
 
     applySearch(objectiveSearchInput, '.faculty-objective-row', () => {
-        document.querySelectorAll('#objective-data details').forEach((detailsCard) => {
-            const rows = Array.from(detailsCard.querySelectorAll('.faculty-objective-row'));
-            const hasVisibleRows = rows.some((row) => row.style.display !== 'none');
-            detailsCard.style.display = hasVisibleRows ? '' : 'none';
+        document.querySelectorAll('.objective-section-card').forEach((sectionCard) => {
+            const tables = Array.from(sectionCard.querySelectorAll('.objective-department-table'));
+            tables.forEach((table) => {
+                const rows = Array.from(table.querySelectorAll('.faculty-objective-row'));
+                const hasVisibleRows = rows.some((row) => row.style.display !== 'none');
+                table.style.display = hasVisibleRows ? '' : 'none';
+            });
+
+            const anyVisibleTable = tables.some((table) => table.style.display !== 'none');
+            sectionCard.style.display = anyVisibleTable ? '' : 'none';
+        });
+
+        document.querySelectorAll('.objective-year-card').forEach((yearCard) => {
+            const sections = Array.from(yearCard.querySelectorAll('.objective-section-card'));
+            const hasVisibleSections = sections.some((section) => section.style.display !== 'none');
+            yearCard.style.display = hasVisibleSections ? '' : 'none';
+        });
+
+        document.querySelectorAll('.objective-group-card').forEach((groupCard) => {
+            const years = Array.from(groupCard.querySelectorAll('.objective-year-card'));
+            const hasVisibleYears = years.some((year) => year.style.display !== 'none');
+            const objectiveMatch = currentObjective === '__all'
+                || (groupCard.getAttribute('data-objective') || '') === currentObjective;
+            groupCard.style.display = hasVisibleYears && objectiveMatch ? '' : 'none';
         });
     });
 
@@ -612,6 +886,7 @@
     const hash = window.location.hash ? window.location.hash.substring(1) : '';
     const queryParams = new URLSearchParams(window.location.search);
     const querySubject = (queryParams.get('subject') || '').trim() || null;
+    const focusRequest = (queryParams.get('focusRequest') || '').trim();
     if (hash) {
         // Explicit subject from query should take priority when opening student-data
         if (hash === 'student-data' && querySubject) {
@@ -657,6 +932,43 @@
 
     // Default view when no hash: pending approvals
     activate('pending');
+    renderAnalyticsCharts();
+
+    const focusRequestRow = () => {
+        if (!focusRequest) return;
+
+        const selector = `[data-request-id="${focusRequest}"]`;
+        const row = document.querySelector(selector);
+        if (!row) return;
+
+        const mentorCard = row.closest('.mentor-subject-card');
+        if (mentorCard) {
+            mentorCard.open = true;
+            const allChip = mentorSubjectChips.find((chip) => (chip.dataset.mentorSubject || '') === '__all');
+            if (allChip) {
+                mentorSubjectChips.forEach((c) => c.classList.toggle('active', c === allChip));
+                filterMentorSubjectCards('__all');
+            }
+        }
+
+        const objectiveCard = row.closest('.objective-group-card');
+        if (objectiveCard) {
+            objectiveCard.open = true;
+            const allObjectiveChip = objectiveChips.find((chip) => (chip.dataset.objective || '') === '__all');
+            if (allObjectiveChip) {
+                objectiveChips.forEach((c) => c.classList.toggle('active', c === allObjectiveChip));
+                filterObjectiveCards('__all');
+            }
+        }
+
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.style.animation = 'pulse 0.8s ease';
+        setTimeout(() => {
+            row.style.animation = '';
+        }, 900);
+    };
+
+    focusRequestRow();
 
     wrapTablesForScroll();
 

@@ -104,11 +104,8 @@
               <td rowspan="<%= mentorObjectives.length %>">
                 <% if (searchResult.mentorInfo.mentorName) { %>
                   <strong><%= searchResult.mentorInfo.mentorName %></strong>
-                  <% if (searchResult.mentorInfo.mentorFacultyId) { %>
-                    <br /><span class="muted">ID: <%= searchResult.mentorInfo.mentorFacultyId %></span>
-                  <% } %>
                 <% } else if (searchResult.mentorInfo.mentorFacultyId) { %>
-                  <span class="muted"><%= searchResult.mentorInfo.mentorFacultyId %></span>
+                  <span class="muted">Mentor assigned</span>
                 <% } else { %>
                   <span class="muted">Mentor not assigned</span>
                 <% } %>
@@ -284,7 +281,7 @@
         ];
 
     const mentorCell = (newData.mentorInfo.mentorName || newData.mentorInfo.mentorFacultyId)
-      ? `<strong>${escapeHtml(newData.mentorInfo.mentorName || newData.mentorInfo.mentorFacultyId || '-')}</strong>${newData.mentorInfo.mentorFacultyId ? `<br /><span class="muted">ID: ${escapeHtml(newData.mentorInfo.mentorFacultyId)}</span>` : ''}`
+      ? `<strong>${escapeHtml(newData.mentorInfo.mentorName || 'Mentor assigned')}</strong>`
       : '<span class="muted">Mentor not assigned</span>';
 
     const rowsHtml = objectives.map((obj, idx) => {
@@ -463,3 +460,5 @@
     50% { background-color: rgba(16, 185, 129, 0.1); }
   }
 </style>
+
+<%- include('partials/footer') %>

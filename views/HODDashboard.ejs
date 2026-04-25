@@ -4,7 +4,8 @@
 <div class="layout-wrap">
 	<aside class="sidebar">
 		<h2>HOD</h2>
-		<a href="#hod-subject-data" data-target="hod-subject-data" class="active">Approvals</a>
+		<a href="#hod-analytics" data-target="hod-analytics" class="active">Analytics</a>
+		<a href="#hod-subject-data" data-target="hod-subject-data">Approvals</a>
 		<a href="#hod-mentee-data" data-target="hod-mentee-data">Mentee approvals</a>
 		<a href="#student-clearance-search" data-target="student-clearance-search">Student clearance search</a>
 		<a href="#manage-students" data-target="manage-students">Manage students</a>
@@ -153,6 +154,80 @@
 			</div>
 		</div>
 
+		<div class="panel" data-panel="hod-analytics">
+			<div class="card">
+				<div class="flex-between">
+					<h2 id="hod-analytics">Approval analytics</h2>
+					<span class="badge"><%= (hodAnalytics && hodAnalytics.overall ? hodAnalytics.overall.pendingHod : 0) %> pending with HOD</span>
+				</div>
+
+				<% const analytics = hodAnalytics || { overall: { total: 0, students: 0, approved: 0, pending: 0, denied: 0, pendingHod: 0, pendingFaculty: 0, approvalRate: 0 }, categories: [] }; %>
+
+				<div class="grid two" style="gap:12px;margin-top:12px;">
+					<div class="card" style="margin:0;padding:14px;">
+						<p class="muted" style="margin:0 0 4px;">Total approval records</p>
+						<h3 style="margin:0;"><%= analytics.overall.total %></h3>
+					</div>
+					<div class="card" style="margin:0;padding:14px;">
+						<p class="muted" style="margin:0 0 4px;">Total students (category-wise sum)</p>
+						<h3 style="margin:0;"><%= analytics.overall.students %></h3>
+					</div>
+					<div class="card" style="margin:0;padding:14px;">
+						<p class="muted" style="margin:0 0 4px;">Pending HOD</p>
+						<h3 style="margin:0;color:#b45309;"><%= analytics.overall.pendingHod %></h3>
+					</div>
+					<div class="card" style="margin:0;padding:14px;">
+						<p class="muted" style="margin:0 0 4px;">Approved</p>
+						<h3 style="margin:0;color:#0f766e;"><%= analytics.overall.approved %></h3>
+					</div>
+				</div>
+
+				<div class="grid two" style="gap:14px;margin-top:14px;">
+					<div class="card" style="margin:0;padding:14px;">
+						<h3 style="margin:0 0 10px;">Overall status split (<%= analytics.overall.approvalRate %>%)</h3>
+						<canvas id="hod-overall-pie" width="220" height="220" style="max-width:220px;"></canvas>
+						<div class="muted" id="hod-overall-legend" style="margin-top:10px;"></div>
+					</div>
+					<div class="card" style="margin:0;padding:14px;">
+						<h3 style="margin:0 0 10px;">Category workload split</h3>
+						<canvas id="hod-category-pie" width="220" height="220" style="max-width:220px;"></canvas>
+						<div class="muted" id="hod-category-legend" style="margin-top:10px;"></div>
+					</div>
+				</div>
+
+				<div style="margin-top:14px;">
+					<table>
+						<tr>
+							<th>Category</th>
+							<th>Total</th>
+							<th>Students</th>
+							<th>Approved</th>
+							<th>Pending</th>
+							<th>Denied</th>
+							<th>Pending Faculty</th>
+							<th>Pending HOD</th>
+							<th>Approval %</th>
+						</tr>
+						<% analytics.categories.forEach(function(c){ %>
+							<tr>
+								<td><%= c.label %></td>
+								<td><%= c.total %></td>
+								<td><%= c.students %></td>
+								<td><%= c.approved %></td>
+								<td><%= c.pending %></td>
+								<td><%= c.denied %></td>
+								<td><%= c.pendingFaculty %></td>
+								<td><%= c.pendingHod %></td>
+								<td><%= c.approvalRate %>%</td>
+							</tr>
+						<% }); %>
+					</table>
+				</div>
+
+				<script id="hod-analytics-data" type="application/json"><%- JSON.stringify(analytics) %></script>
+			</div>
+		</div>
+
 		<div class="panel" data-panel="hod-mentee-data">
 			<div class="card">
 				<div class="flex-between">
@@ -183,52 +258,78 @@
 				<% if (!hodMentorRequests || !hodMentorRequests.length) { %>
 					<p class="muted">No mentor-related requests pending for HOD review.</p>
 				<% } else { %>
-					<table>
-						<tr>
-							<th>Student</th>
-							<th>Roll number</th>
-							<th>Year</th>
-							<th>Department</th>
-							<th>Section</th>
-							<th>Mentor subject</th>
-							<th>Branch / Year</th>
-							<th>Status</th>
-							<th>Action</th>
-						</tr>
-						<% hodMentorRequestGroups.forEach(function(group){ %>
-							<tr class="hod-mentor-group-row hod-mentor-year-row">
-								<td colspan="9"><strong>Year: <%= group.year %></strong></td>
-							</tr>
-							<% group.sections.forEach(function(sectionGroup){ %>
-								<tr class="hod-mentor-group-row hod-mentor-section-row">
-									<td colspan="9"><span class="muted">Section: <%= sectionGroup.section %></span></td>
-								</tr>
-								<% sectionGroup.departments.forEach(function(deptGroup){ %>
-								<tr class="hod-mentor-group-row hod-mentor-dept-row">
-									<td colspan="9"><span class="muted">Department: <%= deptGroup.department %></span></td>
-								</tr>
-								<% deptGroup.rows.forEach(function(r){ %>
-							<tr class="hod-mentor-row" data-year="<%= r.year || '' %>" data-section="<%= r.section || '' %>" data-department="<%= r.department || '' %>">
-								<td><%= r.studentName || '-' %></td>
-								<td><%= r.rollNumber || '-' %></td>
-								<td><%= r.year || '-' %></td>
-								<td><%= r.department || '-' %></td>
-								<td><%= r.section || '-' %></td>
-								<td><%= r.subjectName || r.reason || '-' %></td>
-								<td><%= r.branch || '-' %><% if (r.year) { %> • Year <%= r.year %><% } %></td>
-								<td><%= r.status || '-' %></td>
-								<td>
-									<form action="/hod/requests/<%= r.id %>/approve" method="POST" style="display:inline">
-										<input type="hidden" name="redirectPanel" value="hod-mentee-data" />
-										<button type="submit" class="btn btn-accent">Approve</button>
-									</form>
-								</td>
-							</tr>
-								<% }); %>
-								<% }); %>
-							<% }); %>
+					<div style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 14px;">
+						<button type="button" class="btn btn-outline-primary hod-mentor-subject-chip active" data-mentor-subject="__all">All subjects</button>
+						<% hodMentorRequestGroups.forEach(function(subjectGroup){ const subjectFilter = subjectGroup.subjectCode || subjectGroup.subjectName; %>
+							<button type="button" class="btn btn-outline-primary hod-mentor-subject-chip" data-mentor-subject="<%= subjectFilter %>">
+								<%= subjectGroup.subjectName || subjectGroup.subjectCode || 'Mentor Subject' %>
+							</button>
 						<% }); %>
-					</table>
+					</div>
+
+					<div class="stack" style="gap:14px;">
+						<% hodMentorRequestGroups.forEach(function(subjectGroup){ const subjectFilter = subjectGroup.subjectCode || subjectGroup.subjectName; %>
+							<details class="card hod-mentor-subject-card" data-mentor-subject="<%= subjectFilter %>" style="margin:0;">
+								<summary class="flex-between" style="gap:10px;align-items:flex-start;cursor:pointer;list-style:none;">
+									<h3 style="margin:0;"><%= subjectGroup.subjectName || subjectGroup.subjectCode || '-' %></h3>
+									<span class="badge"><%= subjectGroup.years.length %> year group(s)</span>
+								</summary>
+
+								<div class="stack" style="margin-top:12px;gap:12px;">
+									<% subjectGroup.years.forEach(function(group){ %>
+										<div class="card hod-mentor-year-card" style="margin:0;padding:14px;">
+											<h4 style="margin:0 0 10px;">Year: <%= group.year %></h4>
+
+											<div class="stack" style="gap:10px;">
+												<% group.sections.forEach(function(sectionGroup){ %>
+													<div class="card hod-mentor-section-card" style="margin:0;padding:12px;">
+														<div class="muted" style="font-weight:600;margin-bottom:8px;">Section: <%= sectionGroup.section %></div>
+
+														<% sectionGroup.departments.forEach(function(deptGroup){ %>
+															<div class="muted" style="margin:6px 0;font-weight:600;">Department: <%= deptGroup.department %></div>
+															<table style="margin-top:6px;">
+																<tr>
+																	<th>Student</th>
+																	<th>Roll number</th>
+																	<th>Branch / Year</th>
+																	<th>Status</th>
+																	<th>Action</th>
+																</tr>
+																<% deptGroup.rows.forEach(function(r){ %>
+																<tr class="hod-mentor-row" data-request-id="<%= r.id %>" data-year="<%= r.year || '' %>" data-section="<%= r.section || '' %>" data-department="<%= r.department || '' %>" data-mentor-subject="<%= subjectFilter %>">
+																	<td><%= r.studentName || '-' %></td>
+																	<td><%= r.rollNumber || '-' %></td>
+																	<td>
+																		<%= r.branch || '-' %>
+																		<% if (r.year) { %> • Year <%= r.year %><% } %>
+																		<% if (r.semester) { %> • Sem <%= r.semester %><% } %>
+																	</td>
+																	<td><%= r.status || '-' %></td>
+																	<td>
+																		<form action="/hod/requests/<%= r.id %>/approve" method="POST" style="display:inline">
+																			<input type="hidden" name="redirectPanel" value="hod-mentee-data" />
+																			<input type="hidden" name="focusRequest" value="<%= r.id %>" />
+																			<button type="submit" class="btn btn-accent">Approve</button>
+																		</form>
+																		<form action="/hod/requests/<%= r.id %>/deny" method="POST" style="display:inline">
+																			<input type="hidden" name="redirectPanel" value="hod-mentee-data" />
+																			<input type="hidden" name="focusRequest" value="<%= r.id %>" />
+																			<button type="submit" class="btn btn-outline-primary">Deny</button>
+																		</form>
+																	</td>
+																</tr>
+																<% }); %>
+															</table>
+														<% }); %>
+													</div>
+												<% }); %>
+											</div>
+										</div>
+									<% }); %>
+								</div>
+							</details>
+						<% }); %>
+					</div>
 				<% } %>
 			</div>
 		</div>
@@ -1145,6 +1246,19 @@
 	const hodSubjectSearchInput = document.getElementById('hod-subject-search');
 	const hodMentorSearchInput = document.getElementById('hod-mentor-search');
 	const hodObjectiveSearchInput = document.getElementById('hod-objective-search');
+	const hodAnalyticsDataNode = document.getElementById('hod-analytics-data');
+	let hodAnalyticsData = null;
+
+	if (hodAnalyticsDataNode && hodAnalyticsDataNode.textContent) {
+		try {
+			hodAnalyticsData = JSON.parse(hodAnalyticsDataNode.textContent);
+		} catch (err) {
+			hodAnalyticsData = null;
+		}
+	}
+	const hodMentorSubjectChips = Array.from(document.querySelectorAll('.hod-mentor-subject-chip'));
+	const hodMentorSubjectCards = Array.from(document.querySelectorAll('.hod-mentor-subject-card'));
+	let currentHodMentorSubject = '__all';
 
 	const wrapTablesForScroll = () => {
 		document.querySelectorAll('.content table').forEach((table) => {
@@ -1154,6 +1268,86 @@
 			table.parentNode.insertBefore(wrapper, table);
 			wrapper.appendChild(table);
 		});
+	};
+
+	const renderPieChart = (canvasId, legendId, segments) => {
+		const canvas = document.getElementById(canvasId);
+		if (!canvas || !Array.isArray(segments) || !segments.length) return;
+
+		const total = segments.reduce((sum, segment) => sum + (segment.value || 0), 0);
+		const ctx = canvas.getContext('2d');
+		if (!ctx) return;
+
+		const width = canvas.width;
+		const height = canvas.height;
+		const centerX = width / 2;
+		const centerY = height / 2;
+		const radius = Math.min(centerX, centerY) - 10;
+
+		ctx.clearRect(0, 0, width, height);
+
+		if (!total) {
+			ctx.beginPath();
+			ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+			ctx.fillStyle = '#e5e7eb';
+			ctx.fill();
+			ctx.closePath();
+			const legend = document.getElementById(legendId);
+			if (legend) legend.textContent = 'No data available yet.';
+			return;
+		}
+
+		let startAngle = -Math.PI / 2;
+		segments.forEach((segment) => {
+			const value = segment.value || 0;
+			if (!value) return;
+			const sliceAngle = (value / total) * Math.PI * 2;
+
+			ctx.beginPath();
+			ctx.moveTo(centerX, centerY);
+			ctx.arc(centerX, centerY, radius, startAngle, startAngle + sliceAngle);
+			ctx.closePath();
+			ctx.fillStyle = segment.color;
+			ctx.fill();
+
+			startAngle += sliceAngle;
+		});
+
+		ctx.beginPath();
+		ctx.arc(centerX, centerY, radius * 0.52, 0, Math.PI * 2);
+		ctx.fillStyle = '#ffffff';
+		ctx.fill();
+		ctx.closePath();
+
+		const legend = document.getElementById(legendId);
+		if (legend) {
+			legend.innerHTML = segments
+				.filter((segment) => (segment.value || 0) > 0)
+				.map((segment) => {
+					const pct = Math.round(((segment.value || 0) / total) * 100);
+					return `<span style="display:inline-flex;align-items:center;gap:6px;margin-right:12px;"><span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:${segment.color};"></span>${segment.label}: ${segment.value} (${pct}%)</span>`;
+				})
+				.join('');
+		}
+	};
+
+	const renderHodAnalyticsCharts = () => {
+		if (!hodAnalyticsData || !hodAnalyticsData.overall) return;
+
+		renderPieChart('hod-overall-pie', 'hod-overall-legend', [
+			{ label: 'Approved', value: hodAnalyticsData.overall.approved || 0, color: '#0f766e' },
+			{ label: 'Pending', value: hodAnalyticsData.overall.pending || 0, color: '#f59e0b' },
+			{ label: 'Denied', value: hodAnalyticsData.overall.denied || 0, color: '#dc2626' },
+		]);
+
+		const categoryPalette = ['#2563eb', '#7c3aed', '#0891b2', '#ca8a04', '#16a34a', '#be123c'];
+		const categorySegments = (hodAnalyticsData.categories || []).map((category, idx) => ({
+			label: category.label || 'Category',
+			value: category.total || 0,
+			color: categoryPalette[idx % categoryPalette.length],
+		}));
+
+		renderPieChart('hod-category-pie', 'hod-category-legend', categorySegments);
 	};
 
 	const applySearch = (input, rowSelector, afterFilter) => {
@@ -1189,7 +1383,9 @@
 		});
 	});
 	const serverInitial = "<%= initialPanel || '' %>";
-	const initial = serverInitial || window.location.hash?.replace('#', '') || links[0]?.dataset.target || 'pending';
+	const initial = serverInitial || window.location.hash?.replace('#', '') || 'hod-analytics';
+	const queryParams = new URLSearchParams(window.location.search);
+	const focusRequest = (queryParams.get('focusRequest') || '').trim();
 	activate(initial);
 
 	// Keep users on the same HOD tab after any POST form submission.
@@ -1397,12 +1593,87 @@
 		});
 	});
 
-	applySearch(hodMentorSearchInput, '.hod-mentor-row', (query) => {
-		document.querySelectorAll('.hod-mentor-group-row').forEach((row) => {
-			row.style.display = query ? 'none' : '';
+	const filterHodMentorSubjectCards = (subjectKey) => {
+		currentHodMentorSubject = subjectKey || '__all';
+		hodMentorSubjectCards.forEach((card) => {
+			const cardSubject = card.getAttribute('data-mentor-subject') || '';
+			const isVisible = currentHodMentorSubject === '__all' || cardSubject === currentHodMentorSubject;
+			card.style.display = isVisible ? '' : 'none';
+
+			if (currentHodMentorSubject === '__all') {
+				card.open = false;
+			} else {
+				card.open = isVisible;
+			}
+		});
+	};
+
+	if (hodMentorSubjectChips.length && hodMentorSubjectCards.length) {
+		hodMentorSubjectChips.forEach((chip) => {
+			chip.addEventListener('click', () => {
+				const subjectKey = chip.dataset.mentorSubject || '__all';
+				hodMentorSubjectChips.forEach((c) => c.classList.toggle('active', c === chip));
+				filterHodMentorSubjectCards(subjectKey);
+			});
+		});
+		filterHodMentorSubjectCards('__all');
+	}
+
+	applySearch(hodMentorSearchInput, '.hod-mentor-row', () => {
+		document.querySelectorAll('.hod-mentor-section-card').forEach((sectionCard) => {
+			const tables = Array.from(sectionCard.querySelectorAll('table'));
+			tables.forEach((table) => {
+				const rows = Array.from(table.querySelectorAll('.hod-mentor-row'));
+				const hasVisibleRows = rows.some((row) => row.style.display !== 'none');
+				table.style.display = hasVisibleRows ? '' : 'none';
+			});
+
+			const anyVisibleTable = tables.some((table) => table.style.display !== 'none');
+			sectionCard.style.display = anyVisibleTable ? '' : 'none';
+		});
+
+		document.querySelectorAll('.hod-mentor-year-card').forEach((yearCard) => {
+			const sections = Array.from(yearCard.querySelectorAll('.hod-mentor-section-card'));
+			const hasVisibleSections = sections.some((section) => section.style.display !== 'none');
+			yearCard.style.display = hasVisibleSections ? '' : 'none';
+		});
+
+		hodMentorSubjectCards.forEach((subjectCard) => {
+			const years = Array.from(subjectCard.querySelectorAll('.hod-mentor-year-card'));
+			const hasVisibleYears = years.some((year) => year.style.display !== 'none');
+			const subjectMatch = currentHodMentorSubject === '__all'
+				|| (subjectCard.getAttribute('data-mentor-subject') || '') === currentHodMentorSubject;
+			subjectCard.style.display = hasVisibleYears && subjectMatch ? '' : 'none';
 		});
 	});
 	applySearch(hodObjectiveSearchInput, '.hod-objective-row');
+	renderHodAnalyticsCharts();
+
+	const focusRequestRow = () => {
+		if (!focusRequest) return;
+
+		const selector = `[data-request-id="${focusRequest}"]`;
+		const row = document.querySelector(selector);
+		if (!row) return;
+
+		const mentorCard = row.closest('.hod-mentor-subject-card');
+		if (mentorCard) {
+			mentorCard.open = true;
+			const allChip = hodMentorSubjectChips.find((chip) => (chip.dataset.mentorSubject || '') === '__all');
+			if (allChip) {
+				hodMentorSubjectChips.forEach((c) => c.classList.toggle('active', c === allChip));
+				filterHodMentorSubjectCards('__all');
+			}
+		}
+
+		row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		row.style.animation = 'pulse 0.8s ease';
+		setTimeout(() => {
+			row.style.animation = '';
+		}, 900);
+	};
+
+	focusRequestRow();
 
 	wrapTablesForScroll();
 

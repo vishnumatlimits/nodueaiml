@@ -364,7 +364,280 @@ const compareApprovalRows = (a, b) => {
   return compareRollNumbers(a.rollNumber, b.rollNumber);
 };
 
+const countUniqueStudents = (rows = []) => {
+  const unique = new Set();
+  rows.forEach((row) => {
+    const roll = (row?.rollNumber || '').toString().trim().toUpperCase();
+    if (roll) unique.add(roll);
+  });
+  return unique.size;
+};
+
+const statusBucketForApproval = (row, options = {}) => {
+  const status = (row?.status || '').toString().trim();
+  const approvedByAssignments = !!(row?.assignment1 && row?.assignment2);
+  const approved = status === 'Approved' || (options.useAssignmentPair && approvedByAssignments);
+  if (approved) return 'approved';
+
+  if (
+    ['Rejected by Faculty', 'Rejected by HOD', 'Denied', 'Rejected'].includes(status)
+  ) {
+    return 'denied';
+  }
+
+  return 'pending';
+};
+
+const buildFacultyAnalytics = ({
+  generalRequests = [],
+  subjectRequests = [],
+  mentorSubjectRequests = [],
+  objectiveRequests = [],
+}) => {
+  const categories = [
+    {
+      key: 'subject',
+      label: 'Subject approvals',
+      rows: subjectRequests,
+      options: { useAssignmentPair: true },
+    },
+    {
+      key: 'mentor',
+      label: 'Mentor approvals',
+      rows: mentorSubjectRequests,
+      options: { useAssignmentPair: true },
+    },
+    {
+      key: 'objective',
+      label: 'Objective approvals',
+      rows: objectiveRequests,
+      options: { useAssignmentPair: true },
+    },
+    {
+      key: 'general',
+      label: 'General approvals',
+      rows: generalRequests,
+      options: { useAssignmentPair: false },
+    },
+  ].map((category) => {
+    const totals = category.rows.reduce(
+      (acc, row) => {
+        const bucket = statusBucketForApproval(row, category.options);
+        acc[bucket] += 1;
+        if ((row?.status || '').toString().trim() === 'Pending Faculty') {
+          acc.actionablePending += 1;
+        }
+        return acc;
+      },
+      {
+        approved: 0,
+        pending: 0,
+        denied: 0,
+        actionablePending: 0,
+      },
+    );
+
+    const total = category.rows.length;
+    const approvalRate = total ? Math.round((totals.approved / total) * 100) : 0;
+
+    return {
+      key: category.key,
+      label: category.label,
+      total,
+      students: countUniqueStudents(category.rows),
+      approved: totals.approved,
+      pending: totals.pending,
+      denied: totals.denied,
+      actionablePending: totals.actionablePending,
+      approvalRate,
+    };
+  });
+
+  const overall = categories.reduce(
+    (acc, item) => ({
+      total: acc.total + item.total,
+      students: acc.students + item.students,
+      approved: acc.approved + item.approved,
+      pending: acc.pending + item.pending,
+      denied: acc.denied + item.denied,
+      actionablePending: acc.actionablePending + item.actionablePending,
+    }),
+    {
+      total: 0,
+      students: 0,
+      approved: 0,
+      pending: 0,
+      denied: 0,
+      actionablePending: 0,
+    },
+  );
+
+  const overallApprovalRate = overall.total ? Math.round((overall.approved / overall.total) * 100) : 0;
+
+  return {
+    categories,
+    overall: {
+      ...overall,
+      approvalRate: overallApprovalRate,
+    },
+  };
+};
+
+const buildHodAnalytics = ({ allRequests = [] }) => {
+  const subjectRequests = allRequests.filter(
+    (r) => r.subjectCode && !isMentorRequest(r) && !isObjectiveRequest(r),
+  );
+  const mentorRequests = allRequests.filter((r) => isMentorRequest(r));
+  const objectiveRequests = allRequests.filter((r) => isObjectiveRequest(r));
+  const generalRequests = allRequests.filter(
+    (r) => !r.subjectCode && !isMentorRequest(r) && !isObjectiveRequest(r),
+  );
+
+  const categorySeed = [
+    { key: 'subject', label: 'Subject approvals', rows: subjectRequests },
+    { key: 'mentor', label: 'Mentor approvals', rows: mentorRequests },
+    { key: 'objective', label: 'Objective approvals', rows: objectiveRequests },
+    { key: 'general', label: 'General approvals', rows: generalRequests },
+  ];
+
+  const categories = categorySeed.map((category) => {
+    const totals = category.rows.reduce(
+      (acc, row) => {
+        const status = (row?.status || '').toString().trim();
+
+        if (status === 'Approved') {
+          acc.approved += 1;
+        } else if (['Rejected by Faculty', 'Rejected by HOD', 'Denied', 'Rejected'].includes(status)) {
+          acc.denied += 1;
+        } else {
+          acc.pending += 1;
+        }
+
+        if (status === 'Pending HOD') acc.pendingHod += 1;
+        if (status === 'Pending Faculty') acc.pendingFaculty += 1;
+        return acc;
+      },
+      {
+        approved: 0,
+        pending: 0,
+        denied: 0,
+        pendingHod: 0,
+        pendingFaculty: 0,
+      },
+    );
+
+    const total = category.rows.length;
+    const approvalRate = total ? Math.round((totals.approved / total) * 100) : 0;
+
+    return {
+      key: category.key,
+      label: category.label,
+      total,
+      students: countUniqueStudents(category.rows),
+      approved: totals.approved,
+      pending: totals.pending,
+      denied: totals.denied,
+      pendingHod: totals.pendingHod,
+      pendingFaculty: totals.pendingFaculty,
+      approvalRate,
+    };
+  });
+
+  const overall = categories.reduce(
+    (acc, item) => ({
+      total: acc.total + item.total,
+      students: acc.students + item.students,
+      approved: acc.approved + item.approved,
+      pending: acc.pending + item.pending,
+      denied: acc.denied + item.denied,
+      pendingHod: acc.pendingHod + item.pendingHod,
+      pendingFaculty: acc.pendingFaculty + item.pendingFaculty,
+    }),
+    {
+      total: 0,
+      students: 0,
+      approved: 0,
+      pending: 0,
+      denied: 0,
+      pendingHod: 0,
+      pendingFaculty: 0,
+    },
+  );
+
+  const overallApprovalRate = overall.total ? Math.round((overall.approved / overall.total) * 100) : 0;
+
+  return {
+    categories,
+    overall: {
+      ...overall,
+      approvalRate: overallApprovalRate,
+    },
+  };
+};
+
 const groupMentorRequestsByYearSectionDepartment = (rows = []) => {
+  const subjectMap = new Map();
+
+  rows.forEach((row) => {
+    const subjectCode = (row.subjectCode || '').toString().trim();
+    const subjectName = (row.subjectName || row.reason || 'General Mentor Subject').toString().trim();
+    const subjectKey = subjectCode || subjectName;
+    const year = (row.year || '').toString().trim() || 'No Year';
+    const section = (row.section || '').toString().trim() || 'No Section';
+    const department = (row.department || '').toString().trim() || 'Unassigned Department';
+
+    if (!subjectMap.has(subjectKey)) {
+      subjectMap.set(subjectKey, {
+        subjectCode,
+        subjectName,
+        years: new Map(),
+      });
+    }
+
+    const subjectGroup = subjectMap.get(subjectKey);
+    const yearMap = subjectGroup.years;
+    if (!yearMap.has(year)) {
+      yearMap.set(year, new Map());
+    }
+
+    const sectionMap = yearMap.get(year);
+    if (!sectionMap.has(section)) {
+      sectionMap.set(section, new Map());
+    }
+
+    const normalizedDeptMap = sectionMap.get(section);
+    if (!normalizedDeptMap.has(department)) {
+      normalizedDeptMap.set(department, []);
+    }
+
+    normalizedDeptMap.get(department).push(row);
+  });
+
+  return Array.from(subjectMap.values())
+    .sort((a, b) => compareLabels(a.subjectName || a.subjectCode, b.subjectName || b.subjectCode))
+    .map((subjectGroup) => ({
+      subjectCode: subjectGroup.subjectCode,
+      subjectName: subjectGroup.subjectName,
+      years: Array.from(subjectGroup.years.entries())
+        .sort((a, b) => compareAcademicYear(a[0], b[0]))
+        .map(([year, sectionMap]) => ({
+          year,
+          sections: Array.from(sectionMap.entries())
+            .sort((a, b) => compareLabels(a[0], b[0]))
+            .map(([section, sectionRows]) => ({
+              section,
+              departments: Array.from(sectionRows.entries())
+                .sort((a, b) => compareLabels(a[0], b[0]))
+                .map(([department, departmentRows]) => ({
+                  department,
+                  rows: departmentRows.slice().sort(compareApprovalRows),
+                })),
+            })),
+        })),
+    }));
+};
+
+const groupRowsByYearSectionDepartment = (rows = []) => {
   const yearMap = new Map();
 
   rows.forEach((row) => {
@@ -381,12 +654,12 @@ const groupMentorRequestsByYearSectionDepartment = (rows = []) => {
       sectionMap.set(section, new Map());
     }
 
-    const normalizedDeptMap = sectionMap.get(section);
-    if (!normalizedDeptMap.has(department)) {
-      normalizedDeptMap.set(department, []);
+    const departmentMap = sectionMap.get(section);
+    if (!departmentMap.has(department)) {
+      departmentMap.set(department, []);
     }
 
-    normalizedDeptMap.get(department).push(row);
+    departmentMap.get(department).push(row);
   });
 
   return Array.from(yearMap.entries())
@@ -1017,6 +1290,12 @@ const renderFacultyDashboard = async (req, res, extras = {}) => {
     .sort(compareApprovalRows);
   const objectiveRequests = myRequests.filter((r) => isObjectiveRequest(r));
   const mentorSubjectRequestGroups = groupMentorRequestsByYearSectionDepartment(mentorSubjectRequests);
+  const facultyAnalytics = buildFacultyAnalytics({
+    generalRequests,
+    subjectRequests,
+    mentorSubjectRequests,
+    objectiveRequests,
+  });
 
   // Mentor subjects used for labelling mentor objective toggles
   let mentorSubjects = [];
@@ -1053,6 +1332,7 @@ const renderFacultyDashboard = async (req, res, extras = {}) => {
       facultyId: objective.facultyId,
       years: objective.years || [],
       rows,
+      groupedRows: groupRowsByYearSectionDepartment(rows),
     };
   });
 
@@ -1068,6 +1348,7 @@ const renderFacultyDashboard = async (req, res, extras = {}) => {
       facultyId: r.facultyId || self.facultyId,
       years: [],
       rows: (objectiveRequestMap.get(key) || []).slice().sort(compareApprovalRows),
+      groupedRows: groupRowsByYearSectionDepartment((objectiveRequestMap.get(key) || []).slice().sort(compareApprovalRows)),
     });
   });
 
@@ -1108,6 +1389,7 @@ const renderFacultyDashboard = async (req, res, extras = {}) => {
     objectiveGroups,
     mentorSubjects,
     subjectGroups,
+    facultyAnalytics,
     assignedMentees,
     self,
     profileError: extras.profileError || null,
@@ -1240,6 +1522,8 @@ const renderHodDashboard = async (req, res, extras = {}) => {
     dataError = 'Could not load all records right now.';
   }
 
+  const hodAnalytics = buildHodAnalytics({ allRequests });
+
   const payload = {
     pending: pendingRequests,
     all: allRequests,
@@ -1254,6 +1538,7 @@ const renderHodDashboard = async (req, res, extras = {}) => {
     self,
     subjectGroups,
     hodSubjectGroups,
+    hodAnalytics,
     pendingSubjectGroups,
     dataError,
     profileError: extras.profileError || null,
@@ -2188,7 +2473,7 @@ app.post('/faculty/requests/bulk-assignments', ensureRole('faculty', 'hod'), asy
 // Legacy approve/deny for non-subject requests (still supported)
 app.post('/faculty/requests/:id/:action', ensureRole('faculty', 'hod'), async (req, res) => {
   const { id, action } = req.params;
-  const { note, redirectPanel } = req.body;
+  const { note, redirectPanel, focusRequest } = req.body;
   const isHodUser = req.session?.user?.role === 'hod';
   const dashboardBase = isHodUser ? '/hod' : '/faculty';
   const allowedPanels = new Set([
@@ -2245,7 +2530,9 @@ app.post('/faculty/requests/:id/:action', ensureRole('faculty', 'hod'), async (r
     console.error('Failed to update faculty request status', err);
   }
 
-  return res.redirect(targetPanel ? `${dashboardBase}#${targetPanel}` : dashboardBase);
+  const safeFocus = (focusRequest || '').toString().trim();
+  const query = safeFocus ? `?focusRequest=${encodeURIComponent(safeFocus)}` : '';
+  return res.redirect(targetPanel ? `${dashboardBase}${query}#${targetPanel}` : `${dashboardBase}${query}`);
 });
 
 app.post('/faculty/requests/approve-all', ensureRole('faculty', 'hod'), async (req, res) => {
@@ -2348,7 +2635,7 @@ app.get('/hod', ensureRole('hod'), async (req, res) => renderHodDashboard(req, r
 
 app.post('/hod/requests/:id/:action', ensureRole('hod'), async (req, res) => {
   const { id, action } = req.params;
-  const { note, redirectPanel } = req.body;
+  const { note, redirectPanel, focusRequest } = req.body;
   const allowedPanels = new Set(['hod-subject-data', 'hod-mentee-data']);
   const targetPanel = allowedPanels.has(redirectPanel) ? redirectPanel : null;
   const self = await loadCurrentFaculty(req);
@@ -2393,7 +2680,11 @@ app.post('/hod/requests/:id/:action', ensureRole('hod'), async (req, res) => {
     console.error('Failed to update HOD request status', err);
   }
 
-  return res.redirect(targetPanel ? `/hod#${targetPanel}` : redirectToHodPanel(req, 'hod-subject-data'));
+  const safeFocus = (focusRequest || '').toString().trim();
+  const query = safeFocus ? `?focusRequest=${encodeURIComponent(safeFocus)}` : '';
+  const fallbackPanel = redirectToHodPanel(req, 'hod-subject-data').split('#')[1] || 'hod-subject-data';
+  const panel = targetPanel || fallbackPanel;
+  return res.redirect(`/hod${query}#${panel}`);
 });
 
 app.post('/hod/requests/approve-all-mentee', ensureRole('hod'), async (req, res) => {
