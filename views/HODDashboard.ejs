@@ -232,7 +232,10 @@
 			<div class="card">
 				<div class="flex-between">
 					<h2 id="hod-mentee-data">HOD mentee requests</h2>
-					<span class="badge"><%= hodMentorRequests && hodMentorRequests.length ? hodMentorRequests.length + ' pending' : 'No pending mentee requests' %></span>
+					<span class="badge">
+						<% const pendingCount = (hodMentorRequests || []).filter(r => ['Pending Faculty', 'Pending HOD'].includes(r.status)).length; %>
+						<%= pendingCount ? pendingCount + ' pending' : 'No pending mentee requests' %>
+					</span>
 				</div>
 
 				<div class="grid two" style="margin-top:12px;">
@@ -277,54 +280,56 @@
 
 								<div class="stack" style="margin-top:12px;gap:12px;">
 									<% subjectGroup.years.forEach(function(group){ %>
-										<div class="card hod-mentor-year-card" style="margin:0;padding:14px;">
-											<h4 style="margin:0 0 10px;">Year: <%= group.year %></h4>
-
-											<div class="stack" style="gap:10px;">
-												<% group.sections.forEach(function(sectionGroup){ %>
-													<div class="card hod-mentor-section-card" style="margin:0;padding:12px;">
-														<div class="muted" style="font-weight:600;margin-bottom:8px;">Section: <%= sectionGroup.section %></div>
-
-														<% sectionGroup.departments.forEach(function(deptGroup){ %>
-															<div class="muted" style="margin:6px 0;font-weight:600;">Department: <%= deptGroup.department %></div>
-															<table style="margin-top:6px;">
-																<tr>
-																	<th>Student</th>
-																	<th>Roll number</th>
-																	<th>Branch / Year</th>
-																	<th>Status</th>
-																	<th>Action</th>
-																</tr>
-																<% deptGroup.rows.forEach(function(r){ %>
-																<tr class="hod-mentor-row" data-request-id="<%= r.id %>" data-year="<%= r.year || '' %>" data-section="<%= r.section || '' %>" data-department="<%= r.department || '' %>" data-mentor-subject="<%= subjectFilter %>">
-																	<td><%= r.studentName || '-' %></td>
-																	<td><%= r.rollNumber || '-' %></td>
-																	<td>
-																		<%= r.branch || '-' %>
-																		<% if (r.year) { %> • Year <%= r.year %><% } %>
-																		<% if (r.semester) { %> • Sem <%= r.semester %><% } %>
-																	</td>
-																	<td><%= r.status || '-' %></td>
-																	<td>
-																		<form action="/hod/requests/<%= r.id %>/approve" method="POST" style="display:inline">
-																			<input type="hidden" name="redirectPanel" value="hod-mentee-data" />
-																			<input type="hidden" name="focusRequest" value="<%= r.id %>" />
-																			<button type="submit" class="btn btn-accent">Approve</button>
-																		</form>
-																		<form action="/hod/requests/<%= r.id %>/deny" method="POST" style="display:inline">
-																			<input type="hidden" name="redirectPanel" value="hod-mentee-data" />
-																			<input type="hidden" name="focusRequest" value="<%= r.id %>" />
-																			<button type="submit" class="btn btn-outline-primary">Deny</button>
-																		</form>
-																	</td>
-																</tr>
+										<details class="card hod-mentor-year-card" style="margin:0;padding:0;border:1px solid #e5e7eb;border-radius:6px;">
+											<summary style="cursor:pointer;padding:14px;font-weight:600;list-style:none;user-select:none;">Year: <%= group.year %></summary>
+											<div style="padding:0 14px 14px;">
+												<div class="stack" style="gap:10px;">
+													<% group.sections.forEach(function(sectionGroup){ %>
+														<details class="card hod-mentor-section-card" style="margin:0;padding:0;border:1px solid #e5e7eb;border-radius:6px;">
+															<summary style="cursor:pointer;padding:12px;font-weight:600;list-style:none;user-select:none;color:#666;">Section: <%= sectionGroup.section %></summary>
+															<div style="padding:0 12px 12px;">
+																<% sectionGroup.departments.forEach(function(deptGroup){ %>
+																	<div class="muted" style="margin:6px 0;font-weight:600;">Department: <%= deptGroup.department %></div>
+																	<table style="margin-top:6px;">
+																		<tr>
+																			<th>Student</th>
+																			<th>Roll number</th>
+																			<th>Branch / Year</th>
+																			<th>Status</th>
+																			<th>Action</th>
+																		</tr>
+																		<% deptGroup.rows.forEach(function(r){ %>
+																		<tr class="hod-mentor-row" data-request-id="<%= r.id %>" data-year="<%= r.year || '' %>" data-section="<%= r.section || '' %>" data-department="<%= r.department || '' %>" data-mentor-subject="<%= subjectFilter %>">
+																			<td><%= r.studentName || '-' %></td>
+																			<td><%= r.rollNumber || '-' %></td>
+																			<td>
+																				<%= r.branch || '-' %>
+																				<% if (r.year) { %> • Year <%= r.year %><% } %>
+																				<% if (r.semester) { %> • Sem <%= r.semester %><% } %>
+																			</td>
+																			<td><span class="hod-mentor-status-text"><%= r.status || '-' %></span></td>
+																			<td>
+																				<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+																					<label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;">
+																						<input type="checkbox" class="hod-mentor-status-toggle" data-request-id="<%= r.id %>" data-action="approve" <%= r.status === 'Approved' ? 'checked' : '' %> />
+																						<span>Approve</span>
+																					</label>
+																					<label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;">
+																						<input type="checkbox" class="hod-mentor-status-toggle" data-request-id="<%= r.id %>" data-action="deny" <%= r.status === 'Rejected by HOD' ? 'checked' : '' %> />
+																						<span>Deny</span>
+																					</label>
+																				</div>
+																			</td>
+																		</tr>
+																		<% }); %>
+																	</table>
 																<% }); %>
-															</table>
-														<% }); %>
-													</div>
-												<% }); %>
+															</div>
+														</details>
+													<% }); %>
+												</div>
 											</div>
-										</div>
+										</details>
 									<% }); %>
 								</div>
 							</details>
@@ -615,9 +620,31 @@
 							<form action="/hod/requests/generate-all" method="POST">
 								<button type="submit" class="btn btn-accent">Create requests for all students</button>
 							</form>
+							<form action="/hod/requests/reset-all-default" method="POST" onsubmit="return confirm('Reset ALL subject, mentor, and objective requests to default pending state? This will clear approvals, remarks, and notes.');">
+								<button type="submit" class="btn btn-outline-primary">Reset all requests to default pending</button>
+							</form>
 							<form action="/hod/requests/delete-all" method="POST" onsubmit="return confirm('Delete ALL approval requests from the database? This cannot be undone.');">
 								<button type="submit" class="btn btn-danger">Delete all approval requests</button>
 							</form>
+						</div>
+						<div class="card" style="margin-top:12px;padding:12px;">
+							<div class="flex-between" style="gap:8px;align-items:center;">
+								<strong>Background task status</strong>
+								<span id="hod-task-status-updated" class="muted" style="font-size:12px;">Live</span>
+							</div>
+							<div class="table-responsive" style="margin-top:8px;">
+								<table style="margin-top:0;">
+									<tr>
+										<th>Task</th>
+										<th>Status</th>
+										<th>Progress</th>
+										<th>Last completed</th>
+										<th>Error</th>
+									</tr>
+									<tbody id="hod-task-status-body"></tbody>
+								</table>
+							</div>
+							<script id="hod-task-status-data" type="application/json"><%- JSON.stringify(hodBackgroundTasks || []) %></script>
 						</div>
 					</div>
 					<form action="/hod/subjects" method="POST" class="stack">
@@ -817,6 +844,24 @@
 							.replace(/>/g, '&gt;')
 							.replace(/"/g, '&quot;')
 							.replace(/'/g, '&#39;');
+						const getStatusTone = (status) => {
+							const normalized = String(status || '').toLowerCase();
+							if (normalized.includes('approved')) {
+								return { bg: '#dcfce7', fg: '#166534', border: '#86efac' };
+							}
+							if (normalized.includes('rejected') || normalized.includes('denied')) {
+								return { bg: '#fee2e2', fg: '#991b1b', border: '#fca5a5' };
+							}
+							if (normalized.includes('partial')) {
+								return { bg: '#dbeafe', fg: '#1e3a8a', border: '#93c5fd' };
+							}
+							return { bg: '#fef3c7', fg: '#92400e', border: '#fcd34d' };
+						};
+						const renderStatusPill = (status) => {
+							const label = status || 'Pending';
+							const tone = getStatusTone(label);
+							return `<span style="display:inline-block;padding:2px 10px;border-radius:999px;border:1px solid ${tone.border};background:${tone.bg};color:${tone.fg};font-weight:600;font-size:12px;line-height:1.5;">${escapeHtml(label)}</span>`;
+						};
 						if (clearanceForm && clearanceRoll && clearanceResult) {
 							clearanceForm.addEventListener('submit', async (e) => {
 								e.preventDefault();
@@ -846,8 +891,8 @@
 														<td>${escapeHtml(s.subjectCode || '-')}</td>
 														<td>${escapeHtml(s.subjectName || '-')}</td>
 														<td>${escapeHtml(s.facultyName || '-')}</td>
-														<td>${s.assignment1 ? 'Yes' : 'No'}</td>
-														<td>${s.assignment2 ? 'Yes' : 'No'}</td>
+														<td>${renderStatusPill(s.assignment1 ? 'Approved' : 'Pending')}</td>
+														<td>${renderStatusPill(s.assignment2 ? 'Approved' : 'Pending')}</td>
 														<td>${escapeHtml(s.facultyNote || '-')}</td>
 													</tr>
 												`).join('')}
@@ -859,9 +904,9 @@
 											<div class="card" style="margin-top:12px;">
 												<h3>Mentor status</h3>
 												<p><strong>Mentor:</strong> ${escapeHtml(mentorInfo.mentorName || mentorInfo.mentorFacultyId || '-')}</p>
-												<p><strong>${escapeHtml(mentorInfo.label1 || 'Assignment 1')}:</strong> ${mentorInfo.assignment1 ? 'Approved' : 'Pending'}</p>
-												<p><strong>${escapeHtml(mentorInfo.label2 || 'Assignment 2')}:</strong> ${mentorInfo.assignment2 ? 'Approved' : 'Pending'}</p>
-												<p><strong>Status:</strong> ${escapeHtml(mentorInfo.status || '-')}</p>
+												<p><strong>${escapeHtml(mentorInfo.label1 || 'Assignment 1')}:</strong> ${renderStatusPill(mentorInfo.assignment1 ? 'Approved' : 'Pending')}</p>
+												<p><strong>${escapeHtml(mentorInfo.label2 || 'Assignment 2')}:</strong> ${renderStatusPill(mentorInfo.assignment2 ? 'Approved' : 'Pending')}</p>
+												<p><strong>Status:</strong> ${renderStatusPill(mentorInfo.status || '-')}</p>
 											</div>`
 										: '';
 
@@ -869,7 +914,7 @@
 										? `
 											<div class="card" style="margin-top:12px;">
 												<h3>Objective approvals</h3>
-												<p><strong>Overall status:</strong> ${escapeHtml(objectiveInfo.status || 'Pending Faculty')}</p>
+												<p><strong>Overall status:</strong> ${renderStatusPill(objectiveInfo.status || 'Pending Faculty')}</p>
 												<table style="margin-top:8px;">
 													<tr>
 														<th>Objective</th>
@@ -880,7 +925,7 @@
 														<tr>
 															<td>${escapeHtml(obj.name || '-')}</td>
 															<td>${escapeHtml(obj.facultyName || obj.facultyId || '-')}</td>
-															<td>${obj.approved ? 'Approved' : escapeHtml(obj.status || 'Pending Faculty')}</td>
+															<td>${renderStatusPill(obj.approved ? 'Approved' : (obj.status || 'Pending Faculty'))}</td>
 														</tr>
 													`).join('')}
 												</table>
@@ -1247,7 +1292,11 @@
 	const hodMentorSearchInput = document.getElementById('hod-mentor-search');
 	const hodObjectiveSearchInput = document.getElementById('hod-objective-search');
 	const hodAnalyticsDataNode = document.getElementById('hod-analytics-data');
+	const hodTaskStatusDataNode = document.getElementById('hod-task-status-data');
+	const hodTaskStatusBody = document.getElementById('hod-task-status-body');
+	const hodTaskStatusUpdated = document.getElementById('hod-task-status-updated');
 	let hodAnalyticsData = null;
+	let hodTaskStatusData = [];
 
 	if (hodAnalyticsDataNode && hodAnalyticsDataNode.textContent) {
 		try {
@@ -1256,9 +1305,23 @@
 			hodAnalyticsData = null;
 		}
 	}
+
+	if (hodTaskStatusDataNode && hodTaskStatusDataNode.textContent) {
+		try {
+			hodTaskStatusData = JSON.parse(hodTaskStatusDataNode.textContent);
+		} catch (err) {
+			hodTaskStatusData = [];
+		}
+	}
 	const hodMentorSubjectChips = Array.from(document.querySelectorAll('.hod-mentor-subject-chip'));
 	const hodMentorSubjectCards = Array.from(document.querySelectorAll('.hod-mentor-subject-card'));
 	let currentHodMentorSubject = '__all';
+	const escapeHtml = (value) => String(value == null ? '' : value)
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;');
 
 	const wrapTablesForScroll = () => {
 		document.querySelectorAll('.content table').forEach((table) => {
@@ -1268,6 +1331,62 @@
 			table.parentNode.insertBefore(wrapper, table);
 			wrapper.appendChild(table);
 		});
+	};
+
+	const formatTaskDate = (value) => {
+		if (!value) return '-';
+		const dt = new Date(value);
+		if (Number.isNaN(dt.getTime())) return '-';
+		return dt.toLocaleString();
+	};
+
+	const renderTaskStateBadge = (task) => {
+		if (!task) return '<span class="badge">Unknown</span>';
+		if (task.running) {
+			return '<span style="display:inline-block;padding:2px 10px;border-radius:999px;border:1px solid #93c5fd;background:#dbeafe;color:#1e3a8a;font-weight:600;font-size:12px;">Running</span>';
+		}
+		if (task.lastError) {
+			return '<span style="display:inline-block;padding:2px 10px;border-radius:999px;border:1px solid #fca5a5;background:#fee2e2;color:#991b1b;font-weight:600;font-size:12px;">Failed</span>';
+		}
+		return '<span style="display:inline-block;padding:2px 10px;border-radius:999px;border:1px solid #86efac;background:#dcfce7;color:#166534;font-weight:600;font-size:12px;">Completed</span>';
+	};
+
+	const renderTaskStatusPanel = (tasks) => {
+		if (!hodTaskStatusBody) return;
+		const safeTasks = Array.isArray(tasks) ? tasks : [];
+		hodTaskStatusBody.innerHTML = safeTasks.map((task) => {
+			const processed = Number.isFinite(task.processedItems) ? task.processedItems : 0;
+			const total = Number.isFinite(task.totalItems) ? task.totalItems : 0;
+			const progressText = total > 0 ? `${processed} / ${total}` : `${processed}`;
+			return `
+				<tr>
+					<td>${escapeHtml(task.label || task.key || '-')}</td>
+					<td>${renderTaskStateBadge(task)}</td>
+					<td><strong>${escapeHtml(progressText)}</strong></td>
+					<td>${escapeHtml(formatTaskDate(task.lastCompletedAt))}</td>
+					<td>${escapeHtml(task.lastError || '-')}</td>
+				</tr>
+			`;
+		}).join('');
+
+		if (hodTaskStatusUpdated) {
+			hodTaskStatusUpdated.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+		}
+	};
+
+	const pollTaskStatus = async () => {
+		if (!hodTaskStatusBody) return;
+		try {
+			const response = await fetch('/hod/background-tasks/status', {
+				method: 'GET',
+				headers: { 'Accept': 'application/json' },
+			});
+			if (!response.ok) return;
+			const payload = await response.json();
+			renderTaskStatusPanel(payload.tasks || []);
+		} catch (err) {
+			// Ignore polling failures to keep dashboard usable.
+		}
 	};
 
 	const renderPieChart = (canvasId, legendId, segments) => {
@@ -1384,8 +1503,6 @@
 	});
 	const serverInitial = "<%= initialPanel || '' %>";
 	const initial = serverInitial || window.location.hash?.replace('#', '') || 'hod-analytics';
-	const queryParams = new URLSearchParams(window.location.search);
-	const focusRequest = (queryParams.get('focusRequest') || '').trim();
 	activate(initial);
 
 	// Keep users on the same HOD tab after any POST form submission.
@@ -1646,34 +1763,12 @@
 			subjectCard.style.display = hasVisibleYears && subjectMatch ? '' : 'none';
 		});
 	});
+	renderTaskStatusPanel(hodTaskStatusData);
+	if (hodTaskStatusBody) {
+		setInterval(pollTaskStatus, 4000);
+	}
 	applySearch(hodObjectiveSearchInput, '.hod-objective-row');
 	renderHodAnalyticsCharts();
-
-	const focusRequestRow = () => {
-		if (!focusRequest) return;
-
-		const selector = `[data-request-id="${focusRequest}"]`;
-		const row = document.querySelector(selector);
-		if (!row) return;
-
-		const mentorCard = row.closest('.hod-mentor-subject-card');
-		if (mentorCard) {
-			mentorCard.open = true;
-			const allChip = hodMentorSubjectChips.find((chip) => (chip.dataset.mentorSubject || '') === '__all');
-			if (allChip) {
-				hodMentorSubjectChips.forEach((c) => c.classList.toggle('active', c === allChip));
-				filterHodMentorSubjectCards('__all');
-			}
-		}
-
-		row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-		row.style.animation = 'pulse 0.8s ease';
-		setTimeout(() => {
-			row.style.animation = '';
-		}, 900);
-	};
-
-	focusRequestRow();
 
 	wrapTablesForScroll();
 
@@ -1765,6 +1860,80 @@
 		// Also auto-save when remarks text changes
 		textInputs.forEach((input) => {
 			input.addEventListener('change', debouncedSave);
+		});
+	}
+
+	// AUTO-SAVE: HOD mentee approvals via checkboxes (no page reload)
+	const hodMentorToggles = Array.from(document.querySelectorAll('.hod-mentor-status-toggle'));
+	if (hodMentorToggles.length) {
+		const updateHodMenteeStatus = async (requestId, action) => {
+			const response = await fetch(`/hod/requests/${encodeURIComponent(requestId)}/autosave-status`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ action }),
+			});
+
+			if (!response.ok) {
+				throw new Error(`Save failed: ${response.status}`);
+			}
+
+			return response.json();
+		};
+
+		hodMentorToggles.forEach((toggle) => {
+			toggle.addEventListener('change', async () => {
+				const requestId = toggle.dataset.requestId || '';
+				const row = toggle.closest('.hod-mentor-row');
+				if (!requestId || !row) return;
+
+				const approveToggle = row.querySelector('.hod-mentor-status-toggle[data-action="approve"]');
+				const denyToggle = row.querySelector('.hod-mentor-status-toggle[data-action="deny"]');
+				const statusText = row.querySelector('.hod-mentor-status-text');
+				if (!approveToggle || !denyToggle || !statusText) return;
+
+				const prevApprove = approveToggle.checked;
+				const prevDeny = denyToggle.checked;
+
+				let action = 'pending';
+				if (toggle.dataset.action === 'approve') {
+					if (toggle.checked) {
+						denyToggle.checked = false;
+						action = 'approve';
+					}
+				} else if (toggle.dataset.action === 'deny') {
+					if (toggle.checked) {
+						approveToggle.checked = false;
+						action = 'deny';
+					}
+				}
+
+				if (!approveToggle.checked && !denyToggle.checked) {
+					action = 'pending';
+				}
+
+				approveToggle.disabled = true;
+				denyToggle.disabled = true;
+
+				try {
+					const result = await updateHodMenteeStatus(requestId, action);
+					if (result && result.ok && result.status) {
+						statusText.textContent = result.status;
+						showToast('✓ Mentee status saved');
+					} else {
+						throw new Error('Invalid response');
+					}
+				} catch (err) {
+					console.error('HOD mentee autosave failed:', err);
+					approveToggle.checked = prevApprove;
+					denyToggle.checked = prevDeny;
+					showToast('✗ Save failed', 2000);
+				} finally {
+					approveToggle.disabled = false;
+					denyToggle.disabled = false;
+				}
+			});
 		});
 	}
 })();

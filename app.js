@@ -100,6 +100,98 @@ const ssoCallbackRateLimiter = createSimpleRateLimiter({
   errorMessage: 'Too many Microsoft SSO attempts. Please wait 10 minutes and try again.',
 });
 
+const backgroundTaskState = new Map();
+const HOD_BACKGROUND_TASKS = [
+  { key: 'hod-reset-all-default', label: 'Reset all requests to default pending' },
+  { key: 'hod-generate-all-requests', label: 'Generate all subject/objective requests' },
+  { key: 'hod-generate-mentor-subjects', label: 'Generate mentor requests' },
+  { key: 'hod-generate-objective-approvals', label: 'Generate objective approvals' },
+];
+
+const getBackgroundTaskSummaries = () => HOD_BACKGROUND_TASKS.map(({ key, label }) => {
+  const state = backgroundTaskState.get(key) || {};
+  const processed = Number.isFinite(state.processedItems) ? state.processedItems : 0;
+  const total = Number.isFinite(state.totalItems) ? state.totalItems : 0;
+  return {
+    key,
+    label,
+    running: !!state.running,
+    startedAt: state.startedAt || null,
+    lastCompletedAt: state.lastCompletedAt || null,
+    lastError: state.lastError || null,
+    processedItems: processed,
+    totalItems: total,
+  };
+});
+
+const runBackgroundTask = (taskName, taskFn) => {
+  const current = backgroundTaskState.get(taskName);
+  if (current && current.running) {
+    return false;
+  }
+
+  const nextState = {
+    running: true,
+    startedAt: Date.now(),
+    lastCompletedAt: current?.lastCompletedAt || null,
+    lastError: null,
+    processedItems: 0,
+    totalItems: Number.isFinite(current?.totalItems) ? current.totalItems : 0,
+  };
+  backgroundTaskState.set(taskName, nextState);
+
+  const updateTaskState = (updater) => {
+    const latest = backgroundTaskState.get(taskName) || nextState;
+    const patch = typeof updater === 'function' ? updater(latest) : updater;
+    backgroundTaskState.set(taskName, {
+      ...latest,
+      ...patch,
+    });
+  };
+
+  setImmediate(async () => {
+    try {
+      const controller = {
+        setTotal: (value) => {
+          const safeTotal = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+          updateTaskState({ totalItems: safeTotal });
+        },
+        setProcessed: (value) => {
+          const safeProcessed = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+          updateTaskState({ processedItems: safeProcessed });
+        },
+        incrementProcessed: (value = 1) => {
+          const amount = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+          updateTaskState((latest) => ({
+            processedItems: (latest.processedItems || 0) + amount,
+          }));
+        },
+      };
+
+      await taskFn(controller);
+      const latest = backgroundTaskState.get(taskName) || nextState;
+      backgroundTaskState.set(taskName, {
+        ...latest,
+        running: false,
+        lastCompletedAt: Date.now(),
+        lastError: null,
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(`Background task failed: ${taskName}`, err);
+      const latest = backgroundTaskState.get(taskName) || nextState;
+      backgroundTaskState.set(taskName, {
+        ...latest,
+        running: false,
+        lastCompletedAt: Date.now(),
+        lastError: err?.message || 'Unknown error',
+      });
+    }
+  });
+
+  return true;
+};
+
 const upload = multer({ storage: multer.memoryStorage() });
 
 app.set('view engine', 'ejs');
@@ -301,7 +393,11 @@ const getFallbackFacultyId = async (preferredFacultyId = null) => {
 const isMentorRequest = (request) => {
   const reason = request?.reason || '';
   const subjectCode = request?.subjectCode || '';
-  return reason.startsWith('Mentor objective:') || subjectCode.startsWith('MENTOR::');
+  return (
+    reason.startsWith('Mentor objective:')
+    || reason.startsWith('Mentor objectives:')
+    || subjectCode.startsWith('MENTOR::')
+  );
 };
 
 const isObjectiveRequest = (request) => {
@@ -1015,23 +1111,53 @@ const ensureMentorRequestsForFaculty = async (facultyId) => {
       );
 
       if (hasMentorSubjects) {
-        for (const mentorSubject of applicableMentorSubjects) {
-          const mentorSubjectCode = `MENTOR::${mentorSubject.code}`;
-          const mentorReason = `Mentor objective: ${mentorSubject.code}`;
+        if (applicableMentorSubjects.length) {
+          for (const mentorSubject of applicableMentorSubjects) {
+            const mentorSubjectCode = `MENTOR::${mentorSubject.code}`;
+            const mentorReason = `Mentor objective: ${mentorSubject.code}`;
 
+            // eslint-disable-next-line no-await-in-loop
+            await Request.findOneAndUpdate(
+              {
+                rollNumber: stu.rollNumber,
+                facultyId,
+                subjectCode: mentorSubjectCode,
+                reason: mentorReason,
+              },
+              {
+                ...base,
+                subjectCode: mentorSubjectCode,
+                subjectName: mentorSubject.name,
+                reason: mentorReason,
+                status: 'Pending Faculty',
+              },
+              { upsert: true, new: true, setDefaultsOnInsert: true },
+            );
+          }
+
+          // Remove fallback rows once specific mentor-subject requests exist.
+          // eslint-disable-next-line no-await-in-loop
+          await Request.deleteOne({
+            rollNumber: stu.rollNumber,
+            facultyId,
+            subjectCode: { $in: [null, ''] },
+            reason: fallbackReason,
+          });
+        } else {
+          // No mentor subject applies to this student's year; keep one fallback mentor request.
           // eslint-disable-next-line no-await-in-loop
           await Request.findOneAndUpdate(
             {
               rollNumber: stu.rollNumber,
               facultyId,
-              subjectCode: mentorSubjectCode,
-              reason: mentorReason,
+              subjectCode: { $in: [null, ''] },
+              reason: fallbackReason,
             },
             {
               ...base,
-              subjectCode: mentorSubjectCode,
-              subjectName: mentorSubject.name,
-              reason: mentorReason,
+              subjectCode: null,
+              subjectName: null,
+              reason: fallbackReason,
               status: 'Pending Faculty',
             },
             { upsert: true, new: true, setDefaultsOnInsert: true },
@@ -1405,6 +1531,13 @@ const renderHodDashboard = async (req, res, extras = {}) => {
     return res.status(404).render('staffLogin', { error: 'Profile not found. Please log in again.' });
   }
 
+  try {
+    await ensureMentorRequestsForFaculty(self.facultyId);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to sync mentor requests for HOD dashboard', err);
+  }
+
   // Load subject-wise requests for this HOD acting strictly as assigned faculty
   let subjectGroups = [];
   let hodSubjectGroups = [];
@@ -1485,11 +1618,7 @@ const renderHodDashboard = async (req, res, extras = {}) => {
       return isMentorRequest(r);
     });
     hodMentorRequests = allRequests.filter((r) => {
-      return (
-        r.facultyId === self.facultyId &&
-        isMentorRequest(r) &&
-        ['Pending Faculty', 'Pending HOD'].includes(r.status)
-      );
+      return r.facultyId === self.facultyId && isMentorRequest(r);
     }).sort(compareApprovalRows);
 
     const pendingSubjectMap = new Map();
@@ -1541,6 +1670,7 @@ const renderHodDashboard = async (req, res, extras = {}) => {
     hodAnalytics,
     pendingSubjectGroups,
     dataError,
+    hodBackgroundTasks: getBackgroundTaskSummaries(),
     profileError: extras.profileError || null,
     profileSuccess: extras.profileSuccess || null,
     initialPanel: extras.initialPanel || null,
@@ -2470,6 +2600,62 @@ app.post('/faculty/requests/bulk-assignments', ensureRole('faculty', 'hod'), asy
   return res.redirect(studentDataRedirect);
 });
 
+// Autosave endpoint for Faculty status updates (no page reload).
+app.post('/faculty/requests/:id/autosave-status', ensureRole('faculty', 'hod'), async (req, res) => {
+  const { id } = req.params;
+  const normalizedAction = (req.body?.action || '').toString().trim();
+
+  let request;
+  try {
+    request = await Request.findById(id);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to load request for faculty autosave action', err);
+  }
+  if (!request) return res.status(404).json({ ok: false, error: 'Request not found' });
+
+  const mentorRequest = isMentorRequest(request);
+  const objectiveRequest = isObjectiveRequest(request);
+
+  if (normalizedAction === 'approve') {
+    request.status = 'Approved';
+    request.facultyNote = 'Approved by faculty';
+    if (mentorRequest) {
+      request.assignment1 = true;
+      request.assignment2 = true;
+    } else if (objectiveRequest) {
+      request.assignment1 = true;
+      request.assignment2 = false;
+    }
+  } else if (normalizedAction === 'deny') {
+    request.status = 'Rejected by Faculty';
+    request.facultyNote = 'Denied by faculty';
+    if (mentorRequest || objectiveRequest) {
+      request.assignment1 = false;
+      request.assignment2 = false;
+    }
+  } else if (normalizedAction === 'pending') {
+    request.status = 'Pending Faculty';
+    request.facultyNote = '';
+    if (mentorRequest || objectiveRequest) {
+      request.assignment1 = false;
+      request.assignment2 = false;
+    }
+  } else {
+    return res.status(400).json({ ok: false, error: 'Invalid action' });
+  }
+
+  try {
+    await request.save();
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to autosave faculty request status', err);
+    return res.status(500).json({ ok: false, error: 'Save failed' });
+  }
+
+  return res.json({ ok: true, id: request._id.toString(), status: request.status });
+});
+
 // Legacy approve/deny for non-subject requests (still supported)
 app.post('/faculty/requests/:id/:action', ensureRole('faculty', 'hod'), async (req, res) => {
   const { id, action } = req.params;
@@ -2633,9 +2819,78 @@ app.post('/faculty/requests/approve-all', ensureRole('faculty', 'hod'), async (r
 
 app.get('/hod', ensureRole('hod'), async (req, res) => renderHodDashboard(req, res));
 
+app.get('/hod/background-tasks/status', ensureRole('hod'), (req, res) => {
+  return res.json({
+    tasks: getBackgroundTaskSummaries(),
+    timestamp: Date.now(),
+  });
+});
+
+// Autosave endpoint for HOD mentee request status updates (no page reload).
+app.post('/hod/requests/:id/autosave-status', ensureRole('hod'), async (req, res) => {
+  const { id } = req.params;
+  const normalizedAction = (req.body?.action || '').toString().trim();
+
+  const self = await loadCurrentFaculty(req);
+  let request;
+  try {
+    request = await Request.findById(id);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to load request for HOD autosave action', err);
+  }
+
+  if (!request) {
+    return res.status(404).json({ ok: false, error: 'Request not found' });
+  }
+
+  const mentorRequest = isMentorRequest(request);
+  const ownedByHod = self && request.facultyId === self.facultyId;
+  const mentorAllowed = mentorRequest && ownedByHod;
+  const legacyAllowed = !mentorRequest;
+  if (!mentorAllowed && !legacyAllowed) {
+    return res.status(403).json({ ok: false, error: 'Request not editable' });
+  }
+
+  if (normalizedAction === 'approve') {
+    request.status = 'Approved';
+    request.adminNote = 'Cleared by HOD';
+    if (mentorRequest) {
+      request.assignment1 = true;
+      request.assignment2 = true;
+    }
+  } else if (normalizedAction === 'deny') {
+    request.status = 'Rejected by HOD';
+    request.adminNote = 'Denied by HOD';
+    if (mentorRequest) {
+      request.assignment1 = false;
+      request.assignment2 = false;
+    }
+  } else if (normalizedAction === 'pending') {
+    request.status = 'Pending HOD';
+    request.adminNote = 'Reopened for HOD review';
+    if (mentorRequest) {
+      request.assignment1 = false;
+      request.assignment2 = false;
+    }
+  } else {
+    return res.status(400).json({ ok: false, error: 'Invalid action' });
+  }
+
+  try {
+    await request.save();
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to autosave HOD request status', err);
+    return res.status(500).json({ ok: false, error: 'Save failed' });
+  }
+
+  return res.json({ ok: true, id: request._id.toString(), status: request.status });
+});
+
 app.post('/hod/requests/:id/:action', ensureRole('hod'), async (req, res) => {
   const { id, action } = req.params;
-  const { note, redirectPanel, focusRequest } = req.body;
+  const { note, redirectPanel } = req.body;
   const allowedPanels = new Set(['hod-subject-data', 'hod-mentee-data']);
   const targetPanel = allowedPanels.has(redirectPanel) ? redirectPanel : null;
   const self = await loadCurrentFaculty(req);
@@ -2680,11 +2935,9 @@ app.post('/hod/requests/:id/:action', ensureRole('hod'), async (req, res) => {
     console.error('Failed to update HOD request status', err);
   }
 
-  const safeFocus = (focusRequest || '').toString().trim();
-  const query = safeFocus ? `?focusRequest=${encodeURIComponent(safeFocus)}` : '';
   const fallbackPanel = redirectToHodPanel(req, 'hod-subject-data').split('#')[1] || 'hod-subject-data';
   const panel = targetPanel || fallbackPanel;
-  return res.redirect(`/hod${query}#${panel}`);
+  return res.redirect(`/hod#${panel}`);
 });
 
 app.post('/hod/requests/approve-all-mentee', ensureRole('hod'), async (req, res) => {
@@ -2729,40 +2982,86 @@ app.post('/hod/requests/delete-all', ensureRole('hod'), async (req, res) => {
   return res.redirect(redirectToHodPanel(req, 'manage-subjects'));
 });
 
-// HOD maintenance: create missing subject requests for all students.
-app.post('/hod/requests/generate-all', ensureRole('hod'), async (req, res) => {
-  try {
+// HOD maintenance: reset all requests back to default pending state and ensure missing requests exist.
+app.post('/hod/requests/reset-all-default', ensureRole('hod'), async (req, res) => {
+  runBackgroundTask('hod-reset-all-default', async (task) => {
+    task.setProcessed(0);
+    await Request.updateMany(
+      {},
+      {
+        $set: {
+          status: 'Pending Faculty',
+          assignment1: false,
+          assignment2: false,
+          facultyNote: '',
+          adminNote: '',
+        },
+      },
+    );
+    task.incrementProcessed(1);
+
     const subjects = await Subject.find().lean();
+    const mentorFacultyIds = await Student.distinct('mentorFacultyId', {
+      mentorFacultyId: { $nin: [null, ''] },
+    });
+    task.setTotal(1 + subjects.length + mentorFacultyIds.length + 1);
+
     for (const subject of subjects) {
       // eslint-disable-next-line no-await-in-loop
       await ensureRequestsForSubject(subject);
       // eslint-disable-next-line no-await-in-loop
       await syncSubjectRequestsFaculty(subject);
+      task.incrementProcessed(1);
+    }
+
+    for (const facultyId of mentorFacultyIds) {
+      // eslint-disable-next-line no-await-in-loop
+      await ensureMentorRequestsForFaculty(facultyId);
+      task.incrementProcessed(1);
+    }
+
+    await ensureObjectiveRequestsForAllStudents();
+    task.incrementProcessed(1);
+  });
+
+  return res.redirect(redirectToHodPanel(req, 'manage-subjects'));
+});
+
+// HOD maintenance: create missing subject requests for all students.
+app.post('/hod/requests/generate-all', ensureRole('hod'), async (req, res) => {
+  runBackgroundTask('hod-generate-all-requests', async (task) => {
+    task.setProcessed(0);
+    const subjects = await Subject.find().lean();
+    task.setTotal(subjects.length + 1);
+    for (const subject of subjects) {
+      // eslint-disable-next-line no-await-in-loop
+      await ensureRequestsForSubject(subject);
+      // eslint-disable-next-line no-await-in-loop
+      await syncSubjectRequestsFaculty(subject);
+      task.incrementProcessed(1);
     }
     await ensureObjectiveRequestsForAllStudents();
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to generate requests for all subjects', err);
-  }
+    task.incrementProcessed(1);
+  });
 
   return res.redirect(redirectToHodPanel(req, 'manage-subjects'));
 });
 
 // HOD maintenance: create mentor-subject requests for all students mapped to mentors.
 app.post('/hod/requests/generate-mentor-subjects', ensureRole('hod'), async (req, res) => {
-  try {
+  runBackgroundTask('hod-generate-mentor-subjects', async (task) => {
+    task.setProcessed(0);
     const mentorFacultyIds = await Student.distinct('mentorFacultyId', {
       mentorFacultyId: { $nin: [null, ''] },
     });
+    task.setTotal(mentorFacultyIds.length || 0);
 
     for (const facultyId of mentorFacultyIds) {
       // eslint-disable-next-line no-await-in-loop
       await ensureMentorRequestsForFaculty(facultyId);
+      task.incrementProcessed(1);
     }
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to generate mentor subject requests', err);
-  }
+  });
 
   return res.redirect(redirectToHodPanel(req, 'hod-mentee-data'));
 });
@@ -2786,7 +3085,12 @@ app.post('/hod/requests/delete-mentor-subjects', ensureRole('hod'), async (req, 
 
 // HOD maintenance: create missing objective-approval requests for all applicable students.
 app.post('/hod/requests/generate-objective-approvals', ensureRole('hod'), async (req, res) => {
-  await ensureObjectiveRequestsForAllStudents();
+  runBackgroundTask('hod-generate-objective-approvals', async (task) => {
+    task.setTotal(1);
+    task.setProcessed(0);
+    await ensureObjectiveRequestsForAllStudents();
+    task.incrementProcessed(1);
+  });
   return res.redirect(redirectToHodPanel(req, 'manage-objective-approvals'));
 });
 

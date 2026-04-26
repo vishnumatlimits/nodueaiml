@@ -1,6 +1,6 @@
 {
   "name": "nodue",
-  "version": "0.1.0",
+  "version": "4.0.3",
   "description": "College No-Due approval flow with student, faculty, and admin dashboards (Node.js + Express + EJS).",
   "main": "server.js",
   "scripts": {
@@ -14,7 +14,7 @@
     "express",
     "ejs"
   ],
-  "author": "",
+  "author": "Matli Vishnu Vardhan Naidu",
   "license": "MIT",
   "dependencies": {
     "@azure/msal-node": "^3.8.10",

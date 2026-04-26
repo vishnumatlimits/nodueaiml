@@ -105,19 +105,22 @@
                                     <th>Actions</th>
                                 </tr>
                                 <% pending.forEach((r) => { %>
-                                <tr>
+                                <tr data-request-id="<%= r.id %>">
                                     <td><%= r.studentName %></td>
                                     <td><%= r.department %></td>
                                     <td><%= r.reason %></td>
                                     <td>
-                                        <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
-                                            <input type="hidden" name="redirectPanel" value="pending" />
-                                            <button type="submit" class="btn btn-accent">Approve</button>
-                                        </form>
-                                        <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
-                                            <input type="hidden" name="redirectPanel" value="pending" />
-                                            <button type="submit" class="btn btn-outline-primary">Deny</button>
-                                        </form>
+                                        <span class="faculty-request-status-text" style="display:none;"><%= r.status || 'Pending Faculty' %></span>
+                                        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                                            <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;">
+                                                <input type="checkbox" class="faculty-request-status-toggle" data-request-id="<%= r.id %>" data-action="approve" <%= r.status === 'Approved' ? 'checked' : '' %> />
+                                                <span>Approve</span>
+                                            </label>
+                                            <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;">
+                                                <input type="checkbox" class="faculty-request-status-toggle" data-request-id="<%= r.id %>" data-action="deny" <%= r.status === 'Rejected by Faculty' ? 'checked' : '' %> />
+                                                <span>Deny</span>
+                                            </label>
+                                        </div>
                                     </td>
                                 </tr>
                                 <% }); %>
@@ -263,54 +266,57 @@
 
                                 <div class="stack" style="margin-top:12px;gap:12px;">
                                     <% subjectGroup.years.forEach(function(group){ %>
-                                        <div class="card mentor-year-card" style="margin:0;padding:14px;">
-                                            <h4 style="margin:0 0 10px;">Year: <%= group.year %></h4>
+                                        <details class="card mentor-year-card" style="margin:0;padding:0;border:1px solid #e5e7eb;border-radius:6px;">
+                                            <summary style="cursor:pointer;padding:14px;font-weight:600;list-style:none;user-select:none;">Year: <%= group.year %></summary>
+                                            <div style="padding:0 14px 14px;">
+                                                <div class="stack" style="gap:10px;">
+                                                    <% group.sections.forEach(function(sectionGroup){ %>
+                                                        <details class="card mentor-section-card" style="margin:0;padding:0;border:1px solid #e5e7eb;border-radius:6px;">
+                                                            <summary style="cursor:pointer;padding:12px;font-weight:600;list-style:none;user-select:none;color:#666;">Section: <%= sectionGroup.section %></summary>
+                                                            <div style="padding:0 12px 12px;">
 
-                                            <div class="stack" style="gap:10px;">
-                                                <% group.sections.forEach(function(sectionGroup){ %>
-                                                    <div class="card mentor-section-card" style="margin:0;padding:12px;">
-                                                        <div class="muted" style="font-weight:600;margin-bottom:8px;">Section: <%= sectionGroup.section %></div>
-
-                                                        <% sectionGroup.departments.forEach(function(deptGroup){ %>
-                                                            <div class="muted" style="margin:6px 0;font-weight:600;">Department: <%= deptGroup.department %></div>
-                                                            <table style="margin-top:6px;">
-                                                                <tr>
-                                                                    <th>Student</th>
-                                                                    <th>Roll number</th>
-                                                                    <th>Branch / Year</th>
-                                                                    <th>Status</th>
-                                                                    <th>Action</th>
-                                                                </tr>
-                                                                <% deptGroup.rows.forEach(function(r){ %>
-                                                                <tr class="faculty-mentor-row" data-request-id="<%= r.id %>" data-year="<%= r.year || '' %>" data-section="<%= r.section || '' %>" data-department="<%= r.department || '' %>" data-mentor-subject="<%= subjectFilter %>">
-                                                                    <td><%= r.studentName || '-' %></td>
-                                                                    <td><%= r.rollNumber || '-' %></td>
-                                                                    <td>
-                                                                        <%= r.branch || '-' %>
-                                                                        <% if (r.year) { %> • Year <%= r.year %><% } %>
-                                                                        <% if (r.semester) { %> • Sem <%= r.semester %><% } %>
-                                                                    </td>
-                                                                    <td><%= r.status || '-' %></td>
-                                                                    <td>
-                                                                        <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
-                                                                            <input type="hidden" name="redirectPanel" value="mentor-subject-data" />
-                                                                            <input type="hidden" name="focusRequest" value="<%= r.id %>" />
-                                                                            <button type="submit" class="btn btn-accent">Approve</button>
-                                                                        </form>
-                                                                        <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
-                                                                            <input type="hidden" name="redirectPanel" value="mentor-subject-data" />
-                                                                            <input type="hidden" name="focusRequest" value="<%= r.id %>" />
-                                                                            <button type="submit" class="btn btn-outline-primary">Deny</button>
-                                                                        </form>
-                                                                    </td>
-                                                                </tr>
-                                                                <% }); %>
-                                                            </table>
-                                                        <% }); %>
-                                                    </div>
-                                                <% }); %>
+                                                            <% sectionGroup.departments.forEach(function(deptGroup){ %>
+                                                                <div class="muted" style="margin:6px 0;font-weight:600;">Department: <%= deptGroup.department %></div>
+                                                                <table style="margin-top:6px;">
+                                                                    <tr>
+                                                                        <th>Student</th>
+                                                                        <th>Roll number</th>
+                                                                        <th>Branch / Year</th>
+                                                                        <th>Status</th>
+                                                                        <th>Action</th>
+                                                                    </tr>
+                                                                    <% deptGroup.rows.forEach(function(r){ %>
+                                                                    <tr class="faculty-mentor-row" data-request-id="<%= r.id %>" data-year="<%= r.year || '' %>" data-section="<%= r.section || '' %>" data-department="<%= r.department || '' %>" data-mentor-subject="<%= subjectFilter %>">
+                                                                        <td><%= r.studentName || '-' %></td>
+                                                                        <td><%= r.rollNumber || '-' %></td>
+                                                                        <td>
+                                                                            <%= r.branch || '-' %>
+                                                                            <% if (r.year) { %> • Year <%= r.year %><% } %>
+                                                                            <% if (r.semester) { %> • Sem <%= r.semester %><% } %>
+                                                                        </td>
+                                                                        <td><span class="faculty-request-status-text"><%= r.status || '-' %></span></td>
+                                                                        <td>
+                                                                            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                                                                                <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;">
+                                                                                    <input type="checkbox" class="faculty-request-status-toggle" data-request-id="<%= r.id %>" data-action="approve" <%= r.status === 'Approved' ? 'checked' : '' %> />
+                                                                                    <span>Approve</span>
+                                                                                </label>
+                                                                                <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;">
+                                                                                    <input type="checkbox" class="faculty-request-status-toggle" data-request-id="<%= r.id %>" data-action="deny" <%= r.status === 'Rejected by Faculty' ? 'checked' : '' %> />
+                                                                                    <span>Deny</span>
+                                                                                </label>
+                                                                            </div>
+                                                                        </td>
+                                                                    </tr>
+                                                                    <% }); %>
+                                                                </table>
+                                                            <% }); %>
+                                                            </div>
+                                                        </details>
+                                                    <% }); %>
+                                                </div>
                                             </div>
-                                        </div>
+                                        </details>
                                     <% }); %>
                                 </div>
                             </details>
@@ -380,54 +386,58 @@
                                     <% const groupedRows = group.groupedRows || []; %>
                                     <div class="stack" style="gap:12px;">
                                         <% groupedRows.forEach(function(yearGroup){ %>
-                                            <div class="card objective-year-card" style="margin:0;padding:14px;">
-                                                <h4 style="margin:0 0 10px;">Year: <%= yearGroup.year %></h4>
-                                                <div class="stack" style="gap:10px;">
-                                                    <% yearGroup.sections.forEach(function(sectionGroup){ %>
-                                                        <div class="card objective-section-card" style="margin:0;padding:12px;">
-                                                            <div class="muted" style="font-weight:600;margin-bottom:8px;">Section: <%= sectionGroup.section %></div>
-                                                            <% sectionGroup.departments.forEach(function(deptGroup){ %>
-                                                                <div class="card objective-department-card" style="margin:0 0 8px;padding:10px;">
-                                                                    <div class="muted" style="margin:0 0 8px;font-weight:600;">Department: <%= deptGroup.department %></div>
-                                                                    <table class="objective-department-table" style="margin-top:4px;">
-                                                                        <tr>
-                                                                            <th>Student</th>
-                                                                            <th>Roll number</th>
-                                                                            <th>Branch / Year</th>
-                                                                            <th>Status</th>
-                                                                            <th>Action</th>
-                                                                        </tr>
-                                                                        <% deptGroup.rows.forEach(function(r){ %>
-                                                                        <tr class="faculty-objective-row" data-request-id="<%= r.id %>" data-year="<%= r.year || '' %>" data-section="<%= r.section || '' %>" data-department="<%= r.department || '' %>">
-                                                                            <td><%= r.studentName || '-' %></td>
-                                                                            <td><%= r.rollNumber || '-' %></td>
-                                                                            <td>
-                                                                                <%= r.branch || '-' %>
-                                                                                <% if (r.year) { %> • Year <%= r.year %><% } %>
-                                                                                <% if (r.semester) { %> • Sem <%= r.semester %><% } %>
-                                                                            </td>
-                                                                            <td><%= r.status || '-' %></td>
-                                                                            <td>
-                                                                                <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
-                                                                                    <input type="hidden" name="redirectPanel" value="objective-data" />
-                                                                                    <input type="hidden" name="focusRequest" value="<%= r.id %>" />
-                                                                                    <button type="submit" class="btn btn-accent">Approve</button>
-                                                                                </form>
-                                                                                <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
-                                                                                    <input type="hidden" name="redirectPanel" value="objective-data" />
-                                                                                    <input type="hidden" name="focusRequest" value="<%= r.id %>" />
-                                                                                    <button type="submit" class="btn btn-outline-primary">Deny</button>
-                                                                                </form>
-                                                                            </td>
-                                                                        </tr>
-                                                                        <% }); %>
-                                                                    </table>
+                                            <details class="card objective-year-card" style="margin:0;padding:0;border:1px solid #e5e7eb;border-radius:6px;">
+                                                <summary style="cursor:pointer;padding:14px;font-weight:600;list-style:none;user-select:none;">Year: <%= yearGroup.year %></summary>
+                                                <div style="padding:0 14px 14px;">
+                                                    <div class="stack" style="gap:10px;">
+                                                        <% yearGroup.sections.forEach(function(sectionGroup){ %>
+                                                            <details class="card objective-section-card" style="margin:0;padding:0;border:1px solid #e5e7eb;border-radius:6px;">
+                                                                <summary style="cursor:pointer;padding:12px;font-weight:600;list-style:none;user-select:none;color:#666;">Section: <%= sectionGroup.section %></summary>
+                                                                <div style="padding:0 12px 12px;">
+                                                                <% sectionGroup.departments.forEach(function(deptGroup){ %>
+                                                                    <div class="card objective-department-card" style="margin:0 0 8px;padding:10px;">
+                                                                        <div class="muted" style="margin:0 0 8px;font-weight:600;">Department: <%= deptGroup.department %></div>
+                                                                        <table class="objective-department-table" style="margin-top:4px;">
+                                                                            <tr>
+                                                                                <th>Student</th>
+                                                                                <th>Roll number</th>
+                                                                                <th>Branch / Year</th>
+                                                                                <th>Status</th>
+                                                                                <th>Action</th>
+                                                                            </tr>
+                                                                            <% deptGroup.rows.forEach(function(r){ %>
+                                                                            <tr class="faculty-objective-row" data-request-id="<%= r.id %>" data-year="<%= r.year || '' %>" data-section="<%= r.section || '' %>" data-department="<%= r.department || '' %>">
+                                                                                <td><%= r.studentName || '-' %></td>
+                                                                                <td><%= r.rollNumber || '-' %></td>
+                                                                                <td>
+                                                                                    <%= r.branch || '-' %>
+                                                                                    <% if (r.year) { %> • Year <%= r.year %><% } %>
+                                                                                    <% if (r.semester) { %> • Sem <%= r.semester %><% } %>
+                                                                                </td>
+                                                                                <td><span class="faculty-request-status-text"><%= r.status || '-' %></span></td>
+                                                                                <td>
+                                                                                    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                                                                                        <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;">
+                                                                                            <input type="checkbox" class="faculty-request-status-toggle" data-request-id="<%= r.id %>" data-action="approve" <%= r.status === 'Approved' ? 'checked' : '' %> />
+                                                                                            <span>Approve</span>
+                                                                                        </label>
+                                                                                        <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;">
+                                                                                            <input type="checkbox" class="faculty-request-status-toggle" data-request-id="<%= r.id %>" data-action="deny" <%= r.status === 'Rejected by Faculty' ? 'checked' : '' %> />
+                                                                                            <span>Deny</span>
+                                                                                        </label>
+                                                                                    </div>
+                                                                                </td>
+                                                                            </tr>
+                                                                            <% }); %>
+                                                                        </table>
+                                                                    </div>
+                                                                <% }); %>
                                                                 </div>
-                                                            <% }); %>
-                                                        </div>
-                                                    <% }); %>
+                                                            </details>
+                                                        <% }); %>
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            </details>
                                         <% }); %>
                                     </div>
                                 <% } %>
@@ -507,7 +517,7 @@
                         <th>Status</th>
                     </tr>
                     <% mentorSubjectRequests.forEach((r) => { %>
-                    <tr data-dept="<%= r.department || '' %>">
+                    <tr data-dept="<%= r.department || '' %>" data-request-id="<%= r.id %>">
                         <td><%= r.studentName %></td>
                         <td><%= r.rollNumber %></td>
                         <td>
@@ -519,16 +529,16 @@
                         <td><%= r.section || '-' %></td>
                         <td><%= r.subjectName || r.reason || '-' %></td>
                         <td>
-                            <%= r.status || '-' %>
-                            <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
-                                <form action="/faculty/requests/<%= r.id %>/approve" method="POST" style="display:inline">
-                                    <input type="hidden" name="redirectPanel" value="mentee-data" />
-                                    <button type="submit" class="btn btn-accent btn-sm">Approve</button>
-                                </form>
-                                <form action="/faculty/requests/<%= r.id %>/deny" method="POST" style="display:inline">
-                                    <input type="hidden" name="redirectPanel" value="mentee-data" />
-                                    <button type="submit" class="btn btn-outline-primary btn-sm">Deny</button>
-                                </form>
+                            <span class="faculty-request-status-text"><%= r.status || '-' %></span>
+                            <div style="margin-top:6px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                                <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;">
+                                    <input type="checkbox" class="faculty-request-status-toggle" data-request-id="<%= r.id %>" data-action="approve" <%= r.status === 'Approved' ? 'checked' : '' %> />
+                                    <span>Approve</span>
+                                </label>
+                                <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;">
+                                    <input type="checkbox" class="faculty-request-status-toggle" data-request-id="<%= r.id %>" data-action="deny" <%= r.status === 'Rejected by Faculty' ? 'checked' : '' %> />
+                                    <span>Deny</span>
+                                </label>
                             </div>
                         </td>
                     </tr>
@@ -944,6 +954,12 @@
         const mentorCard = row.closest('.mentor-subject-card');
         if (mentorCard) {
             mentorCard.open = true;
+            // Open all nested details cards upward from the row
+            let parent = row.closest('details');
+            while (parent) {
+                parent.open = true;
+                parent = parent.closest('details');
+            }
             const allChip = mentorSubjectChips.find((chip) => (chip.dataset.mentorSubject || '') === '__all');
             if (allChip) {
                 mentorSubjectChips.forEach((c) => c.classList.toggle('active', c === allChip));
@@ -954,6 +970,12 @@
         const objectiveCard = row.closest('.objective-group-card');
         if (objectiveCard) {
             objectiveCard.open = true;
+            // Open all nested details cards upward from the row
+            let parent = row.closest('details');
+            while (parent) {
+                parent.open = true;
+                parent = parent.closest('details');
+            }
             const allObjectiveChip = objectiveChips.find((chip) => (chip.dataset.objective || '') === '__all');
             if (allObjectiveChip) {
                 objectiveChips.forEach((c) => c.classList.toggle('active', c === allObjectiveChip));
@@ -1099,6 +1121,75 @@
             });
         }
     });
+
+    // AUTO-SAVE: Faculty approve/deny status toggles (no page reload)
+    const facultyStatusToggles = Array.from(document.querySelectorAll('.faculty-request-status-toggle'));
+    if (facultyStatusToggles.length) {
+        const saveFacultyStatus = async (requestId, action) => {
+            const response = await fetch(`/faculty/requests/${encodeURIComponent(requestId)}/autosave-status`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ action }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`Save failed: ${response.status}`);
+            }
+            return response.json();
+        };
+
+        facultyStatusToggles.forEach((toggle) => {
+            toggle.addEventListener('change', async () => {
+                const requestId = toggle.dataset.requestId || '';
+                const row = toggle.closest('tr[data-request-id]');
+                if (!requestId || !row) return;
+
+                const approveToggle = row.querySelector('.faculty-request-status-toggle[data-action="approve"]');
+                const denyToggle = row.querySelector('.faculty-request-status-toggle[data-action="deny"]');
+                const statusText = row.querySelector('.faculty-request-status-text');
+                if (!approveToggle || !denyToggle || !statusText) return;
+
+                const prevApprove = approveToggle.checked;
+                const prevDeny = denyToggle.checked;
+
+                let action = 'pending';
+                if (toggle.dataset.action === 'approve' && toggle.checked) {
+                    denyToggle.checked = false;
+                    action = 'approve';
+                } else if (toggle.dataset.action === 'deny' && toggle.checked) {
+                    approveToggle.checked = false;
+                    action = 'deny';
+                }
+
+                if (!approveToggle.checked && !denyToggle.checked) {
+                    action = 'pending';
+                }
+
+                approveToggle.disabled = true;
+                denyToggle.disabled = true;
+
+                try {
+                    const result = await saveFacultyStatus(requestId, action);
+                    if (result && result.ok && result.status) {
+                        statusText.textContent = result.status;
+                        showToast('✓ Status saved');
+                    } else {
+                        throw new Error('Invalid response');
+                    }
+                } catch (err) {
+                    console.error('Faculty status autosave failed:', err);
+                    approveToggle.checked = prevApprove;
+                    denyToggle.checked = prevDeny;
+                    showToast('✗ Save failed', 2000);
+                } finally {
+                    approveToggle.disabled = false;
+                    denyToggle.disabled = false;
+                }
+            });
+        });
+    }
 })();
 </script>
 
