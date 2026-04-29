@@ -2166,9 +2166,8 @@ window.editObjectiveApproval = async (btn) => {
 		const errorDiv = document.getElementById('student-approval-error');
 		const titleDiv = document.getElementById('student-approval-detail-title');
 		
-		// Hide list, show detail panel
-		if (listPanel) listPanel.style.display = 'none';
-		if (detailPanel) detailPanel.style.display = 'block';
+		// Activate the student detail panel
+		activate('student-approval-detail');
 		if (detailPanel) detailPanel.dataset.currentRoll = rollNumber;
 		
 		loadingDiv.style.display = 'block';
@@ -2190,7 +2189,16 @@ window.editObjectiveApproval = async (btn) => {
 			if (canFinalApprove) {
 				finalBtnHtml = `<button id="hod-final-approve-btn" class="btn btn-accent">Toggle HOD Final Approval</button>`;
 			}
-			if (titleDiv) titleDiv.insertAdjacentHTML('afterend', `<div style="margin-top:8px;margin-bottom:8px;">${finalBtnHtml}</div>`);
+			// Ensure we don't keep inserting controls repeatedly
+			let controlsContainer = document.getElementById('student-approval-detail-controls');
+			if (!controlsContainer) {
+				controlsContainer = document.createElement('div');
+				controlsContainer.id = 'student-approval-detail-controls';
+				controlsContainer.style.marginTop = '8px';
+				controlsContainer.style.marginBottom = '8px';
+				if (titleDiv && titleDiv.parentNode) titleDiv.parentNode.insertBefore(controlsContainer, titleDiv.nextSibling);
+			}
+			controlsContainer.innerHTML = finalBtnHtml;
 			let html = '<div class="stack">';
 			html += `<div style="background:#f5f5f5;padding:12px;border-radius:4px;margin-bottom:16px;">
 				<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -2388,10 +2396,16 @@ window.editObjectiveApproval = async (btn) => {
 	};
 
 	window.backToStudentList = function() {
-		const listPanel = document.querySelector('[data-panel="student-list-by-department"]');
+		// Use activate to switch panels so only the target panel is visible
+		activate('student-list-by-department');
 		const detailPanel = document.querySelector('[data-panel="student-approval-detail"]');
-		if (listPanel) listPanel.style.display = 'block';
-		if (detailPanel) detailPanel.style.display = 'none';
+		if (detailPanel) {
+			detailPanel.dataset.currentRoll = '';
+			const contentDiv = document.getElementById('student-approval-content');
+			if (contentDiv) contentDiv.innerHTML = '';
+			const controlsContainer = document.getElementById('student-approval-detail-controls');
+			if (controlsContainer) controlsContainer.innerHTML = '';
+		}
 	};
 
 	window.approveSelectedRequests = async function() {
@@ -2446,21 +2460,28 @@ window.editObjectiveApproval = async (btn) => {
 
 	window.toggleHodApproval = async function(rollNumber, event) {
 		event.stopPropagation();
-		
+
 		try {
 			const response = await fetch(`/hod/students/${encodeURIComponent(rollNumber)}/final-approve`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({})
 			});
-			
-			const data = await response.json();
-			if (!response.ok) throw new Error(data.error || 'Failed to toggle HOD approval');
-			
-			// Find the button that was clicked
-			const btn = event.target.closest('button');
+
+			if (!response.ok) {
+				throw new Error('Failed to toggle HOD approval');
+			}
+
+			// If server returned JSON, parse it; otherwise proceed (server may redirect with HTML)
+			const contentType = (response.headers.get('content-type') || '').toLowerCase();
+			let data = null;
+			if (contentType.includes('application/json')) {
+				try { data = await response.json(); } catch (e) { data = null; }
+			}
+
+			// Update UI immediately — the server performed the approval
+			const btn = event.target && event.target.closest ? event.target.closest('button') : null;
 			if (btn) {
-				// Update button immediately to green
 				btn.style.background = '#10b981';
 				btn.style.color = 'white';
 				btn.textContent = '✓ HOD Approved';
@@ -2468,7 +2489,7 @@ window.editObjectiveApproval = async (btn) => {
 				btn.title = 'HOD Approved';
 			}
 			updateStudentRowStatus(rollNumber, 'Approved', true);
-			
+
 			// Update the default HOD status box on the page (for login page)
 			const statusBox = document.getElementById('default-hod-status');
 			if (statusBox) {
@@ -2484,11 +2505,12 @@ window.editObjectiveApproval = async (btn) => {
 					dateDiv = document.createElement('div');
 					dateDiv.id = 'hod-approval-date';
 					dateDiv.style.cssText = 'font-size:0.9em;color:#047857;margin-top:4px;';
-					statusBox.querySelector('div > div').appendChild(dateDiv);
+					const inner = statusBox.querySelector('div > div');
+					if (inner) { inner.appendChild(dateDiv); } else { statusBox.appendChild(dateDiv); }
 				}
-				dateDiv.textContent = 'Approved on ' + new Date().toLocaleDateString();
+				try { dateDiv.textContent = 'Approved on ' + new Date().toLocaleDateString(); } catch(e) {}
 			}
-			
+
 			showToast('✓ HOD Approval updated successfully', 1500);
 		} catch (err) {
 			console.error('Error toggling HOD approval:', err);
