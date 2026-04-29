@@ -14,6 +14,7 @@
       </label>
       <button type="submit" class="btn btn-accent">Search</button>
     </form>
+    
   </div>
 </section>
 
@@ -28,6 +29,16 @@
           <% if (searchResult.student.year) { %> • Year <%= searchResult.student.year %><% } %>
           <% if (searchResult.student.semester) { %> • Sem <%= searchResult.student.semester %><% } %>
         </p>
+      <% } %>
+
+      <% if (searchResult.hodApproval && searchResult.hodApproval.approved) { %>
+        <div style="margin-top:8px;">
+          <div class="pill" style="background:#0ea5a4;color:#fff;">HOD: Approved on <%= (new Date(searchResult.hodApproval.approvedAt || searchResult.hodApproval.updatedAt)).toLocaleDateString() %></div>
+        </div>
+      <% } else if (searchResult.hodApproval && !searchResult.hodApproval.approved) { %>
+        <div style="margin-top:8px;">
+          <div class="pill" style="background:#f59e0b;color:#fff;">HOD: Not approved</div>
+        </div>
       <% } %>
 
       <% if (!searchResult.subjects || !searchResult.subjects.length) { %>

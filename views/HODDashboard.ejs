@@ -7,7 +7,8 @@
 		<a href="#hod-analytics" data-target="hod-analytics" class="active">Analytics</a>
 		<a href="#hod-subject-data" data-target="hod-subject-data">Approvals</a>
 		<a href="#hod-mentee-data" data-target="hod-mentee-data">Mentee approvals</a>
-		<a href="#student-clearance-search" data-target="student-clearance-search">Student clearance search</a>
+		<a href="#student-list-by-department" data-target="student-list-by-department">Student approvals</a>
+		<a href="#hod-force-approved" data-target="hod-force-approved">Force-approved students</a>
 		<a href="#manage-students" data-target="manage-students">Manage students</a>
 		<a href="#manage-faculty" data-target="manage-faculty">Manage faculty</a>
 		<a href="#manage-subjects" data-target="manage-subjects">Manage subjects</a>
@@ -339,20 +340,83 @@
 			</div>
 		</div>
 
-		<div class="panel" data-panel="student-clearance-search">
+		<div class="panel" data-panel="student-list-by-department">
 			<div class="card">
 				<div class="flex-between">
-					<h2 id="student-clearance-search">Student clearance search</h2>
-					<span class="badge">Search by roll number</span>
+					<h2 id="student-list-by-department">Student Approvals by Department</h2>
+					<span class="badge">Department / Year / Section</span>
 				</div>
-				<form id="hod-clearance-search-form" class="stack" style="margin-top:12px;">
-					<label class="field">
-						<span>Roll number</span>
-						<input type="text" id="hod-clearance-roll" placeholder="Enter roll number" required />
-					</label>
-					<button type="submit" class="btn btn-accent">Search clearance</button>
-				</form>
-				<div id="hod-clearance-result" style="margin-top:16px;"></div>
+				<% if (!studentsByDepartmentYearSection || !studentsByDepartmentYearSection.length) { %>
+					<p class="muted" style="margin-top:12px;">No students available.</p>
+				<% } else { %>
+					<div style="display:flex;flex-direction:column;gap:12px;margin-top:14px;">
+						<% studentsByDepartmentYearSection.forEach(function(dept){ %>
+							<details class="card" style="border-left:4px solid #e0e0e0;">
+								<summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:12px;align-items:center;padding:8px;font-weight:600;">
+									<span><%= dept.department %></span>
+									<span class="badge"><%= dept.years.reduce((sum, y) => sum + y.sections.reduce((s, sec) => s + sec.students.length, 0), 0) %> students</span>
+								</summary>
+								<div style="margin-top:8px;margin-left:12px;">
+									<% dept.years.forEach(function(year){ %>
+										<details class="card" style="border-left:3px solid #d0d0d0;">
+											<summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:12px;align-items:center;padding:6px;font-weight:500;">
+												<span>Year <%= year.year %></span>
+												<span class="badge"><%= year.sections.reduce((sum, sec) => sum + sec.students.length, 0) %> students</span>
+											</summary>
+											<div style="margin-top:6px;margin-left:12px;">
+												<% year.sections.forEach(function(section){ %>
+													<details class="card" style="border-left:2px solid #c0c0c0;">
+														<summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:12px;align-items:center;padding:4px;font-weight:500;">
+															<span>Section <%= section.section %></span>
+															<span class="badge"><%= section.students.length %> students</span>
+														</summary>
+														<div style="margin-top:6px;margin-left:12px;display:flex;flex-direction:column;gap:4px;">
+															<% section.students.forEach(function(student){ %>
+																<div style="display:flex;justify-content:space-between;align-items:center;padding:6px;background:#f9f9f9;border-radius:4px;cursor:pointer;" onclick="loadStudentApprovals('<%= student.rollNumber %>', event)" class="student-row">
+																	<div>
+																		<strong><%= student.rollNumber %></strong>
+																		<span class="muted"> - <%= student.name %></span>
+																	</div>
+																	<span class="badge" style="<%= student.approvalStatus === 'Approved' ? 'background:#4caf50;color:white;' : 'background:#ff9800;color:white;' %>">
+																		<%= student.approvalStatus %>
+																	</span>
+																</div>
+															<% }); %>
+														</div>
+													</details>
+												<% }); %>
+											</div>
+										</details>
+									<% }); %>
+								</div>
+							</details>
+						<% }); %>
+					</div>
+				<% } %>
+			</div>
+		</div>
+
+		<div class="panel" data-panel="student-approval-detail" style="display:none;">
+			<div class="card">
+				<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+					<h2 id="student-approval-detail-title">Student Approvals</h2>
+					<button onclick="backToStudentList()" class="btn btn-outline-primary btn-sm">Back</button>
+				</div>
+				<div id="student-approval-loading" style="text-align:center;color:#666;">Loading...</div>
+				<div id="student-approval-content" style="display:none;"></div>
+				<div id="student-approval-error" style="display:none;color:#d32f2f;"></div>
+			</div>
+		</div>
+
+		<div class="panel" data-panel="hod-force-approved">
+			<div class="card">
+				<div class="flex-between">
+					<h2 id="hod-force-approved">Force-approved by HOD</h2>
+					<span class="badge">Recent force approvals</span>
+				</div>
+				<div id="hod-force-approved-body" style="margin-top:12px;">
+					<div class="muted">Loading...</div>
+				</div>
 			</div>
 		</div>
 
@@ -1024,7 +1088,8 @@
 									<tr>
 										<td><%= ms.name %></td>
 										<td><%= (ms.years && ms.years.length) ? ms.years.join(', ') : 'All years' %></td>
-										<td>
+										<td style="display:flex;gap:6px;align-items:center;">
+											<button type="button" class="btn btn-outline" data-mentor-id="<%= ms._id %>" data-mentor-name="<%= ms.name %>" onclick="editMentorSubject(this)">Edit</button>
 											<form action="/hod/mentor-subjects/<%= ms._id %>/delete" method="POST" onsubmit="return confirm('Delete this mentor subject?');">
 												<button type="submit" class="btn btn-danger">Delete</button>
 											</form>
@@ -1110,7 +1175,8 @@
 									<% if (obj.facultyId) { %><br /><span class="muted">ID: <%= obj.facultyId %></span><% } %>
 								</td>
 								<td><%= (obj.years && obj.years.length) ? obj.years.join(', ') : 'All years' %></td>
-								<td>
+								<td style="display:flex;gap:6px;align-items:center;">
+									<button type="button" class="btn btn-outline" data-objective-id="<%= obj._id %>" data-objective-name="<%= obj.name %>" data-objective-faculty="<%= obj.facultyId %>" onclick="editObjectiveApproval(this)">Edit</button>
 									<form action="/hod/objective-approvals/<%= obj._id %>/delete" method="POST" onsubmit="return confirm('Delete this objective and its requests?');">
 										<button type="submit" class="btn btn-danger">Delete</button>
 									</form>
@@ -1770,6 +1836,151 @@
 	applySearch(hodObjectiveSearchInput, '.hod-objective-row');
 	renderHodAnalyticsCharts();
 
+// Fetch and render HOD force-approved requests
+const loadHodForceApproved = async () => {
+	const container = document.getElementById('hod-force-approved-body');
+	if (!container) return;
+	container.innerHTML = '<div class="muted">Loading...</div>';
+	try {
+		const res = await fetch('/api/hod/force-approved');
+		const data = await res.json();
+		if (!res.ok) throw new Error(data.error || 'Load failed');
+
+		let groups = Array.isArray(data.groups) ? data.groups : [];
+		if (!groups.length && Array.isArray(data.items) && data.items.length) {
+			const deptMap = new Map();
+			data.items.forEach((it) => {
+				const department = it.department || 'Unassigned';
+				const year = it.year || 'No Year';
+				const section = it.section || 'No Section';
+				const studentKey = `${it.rollNumber || ''}::${(it.studentName || '-').toLowerCase()}`;
+
+				if (!deptMap.has(department)) deptMap.set(department, new Map());
+				const yearMap = deptMap.get(department);
+				if (!yearMap.has(year)) yearMap.set(year, new Map());
+				const sectionMap = yearMap.get(year);
+				if (!sectionMap.has(section)) sectionMap.set(section, new Map());
+				const studentMap = sectionMap.get(section);
+
+				if (!studentMap.has(studentKey)) {
+					studentMap.set(studentKey, {
+						rollNumber: it.rollNumber || '',
+						studentName: it.studentName || '-',
+						subjects: [],
+					});
+				}
+
+				studentMap.get(studentKey).subjects.push({
+					subjectName: it.subjectName || 'General',
+					subjectCode: it.subjectCode || 'General',
+				});
+			});
+
+			groups = Array.from(deptMap.entries()).map(([department, yearMap]) => ({
+				department,
+				years: Array.from(yearMap.entries()).map(([year, sectionMap]) => ({
+					year,
+					sections: Array.from(sectionMap.entries()).map(([section, studentMap]) => ({
+						section,
+						students: Array.from(studentMap.values()),
+					})),
+				})),
+			}));
+		}
+
+		if (!groups.length) {
+			container.innerHTML = '<p class="muted">No force-approved items found.</p>';
+			return;
+		}
+
+		let html = '<div style="display:flex;flex-direction:column;gap:10px;">';
+		groups.forEach((dept) => {
+			html += `<details class="card" open><summary style="cursor:pointer;font-weight:700;">Department: ${dept.department}</summary>`;
+			(dept.years || []).forEach((yearGroup) => {
+				html += `<details class="card" style="margin-top:8px;"><summary style="cursor:pointer;font-weight:600;">Year: ${yearGroup.year}</summary>`;
+				(yearGroup.sections || []).forEach((sectionGroup) => {
+					html += `<details class="card" style="margin-top:8px;"><summary style="cursor:pointer;font-weight:600;">Section: ${sectionGroup.section}</summary>`;
+					html += '<div class="table-responsive" style="margin-top:8px;"><table><tr><th>Student Name</th><th>Subject Name</th></tr>';
+					(sectionGroup.students || []).forEach((stu) => {
+						const subjects = Array.isArray(stu.subjects) ? stu.subjects : [];
+						if (!subjects.length) {
+							html += `<tr><td>${stu.studentName || '-'}</td><td>-</td></tr>`;
+							return;
+						}
+
+						html += `<tr><td><strong>${stu.studentName || '-'}</strong></td><td>${subjects[0].subjectName || '-'}</td></tr>`;
+						for (let i = 1; i < subjects.length; i += 1) {
+							html += `<tr><td></td><td>${subjects[i].subjectName || '-'}</td></tr>`;
+						}
+					});
+					html += '</table></div>';
+					html += '</details>';
+				});
+				html += '</details>';
+			});
+			html += '</details>';
+		});
+		html += '</div>';
+		container.innerHTML = html;
+	} catch (err) {
+		console.error('Failed to load HOD force-approved items', err);
+		container.innerHTML = `<div class="alert">Failed to load data</div>`;
+	}
+};
+
+// Load on panel activation
+document.querySelectorAll('[data-target="hod-force-approved"]').forEach((el) => {
+	el.addEventListener('click', () => setTimeout(loadHodForceApproved, 50));
+});
+
+// initial load if force-approved panel is active via hash/server initial panel
+setTimeout(() => {
+	const activePanel = document.querySelector('.panel.active[data-panel="hod-force-approved"]');
+	if (activePanel) loadHodForceApproved();
+}, 150);
+
+// Inline edit helper for mentor subjects
+window.editMentorSubject = async (btn) => {
+	const id = btn.dataset.mentorId;
+	const current = btn.dataset.mentorName || '';
+	const name = prompt('Edit mentor subject name:', current);
+	if (!id || name === null) return;
+	const payload = { name };
+	try {
+		await fetch(`/hod/mentor-subjects/${encodeURIComponent(id)}/update`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(payload),
+		});
+	} catch (err) {
+		console.error(err);
+	} finally {
+		location.reload();
+	}
+};
+
+// Inline edit helper for objective approvals
+window.editObjectiveApproval = async (btn) => {
+	const id = btn.dataset.objectiveId;
+	const current = btn.dataset.objectiveName || '';
+	const currentFaculty = btn.dataset.objectiveFaculty || '';
+	const name = prompt('Edit objective name:', current);
+	const facultyId = prompt('Faculty ID to assign for approval (leave blank to keep):', currentFaculty || '');
+	if (!id || name === null) return;
+	const payload = { name, facultyId };
+	try {
+		await fetch(`/hod/objective-approvals/${encodeURIComponent(id)}/update`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(payload),
+		});
+	} catch (err) {
+		console.error(err);
+	} finally {
+		location.reload();
+	}
+};
+
 	wrapTablesForScroll();
 
 	// Helper function to show toast notification
@@ -1936,6 +2147,222 @@
 			});
 		});
 	}
+
+	// Student approvals detail view
+	window.loadStudentApprovals = async function(rollNumber, event) {
+		if (event) event.preventDefault();
+		
+		const listPanel = document.querySelector('[data-panel="student-list-by-department"]');
+		const detailPanel = document.querySelector('[data-panel="student-approval-detail"]');
+		const loadingDiv = document.getElementById('student-approval-loading');
+		const contentDiv = document.getElementById('student-approval-content');
+		const errorDiv = document.getElementById('student-approval-error');
+		const titleDiv = document.getElementById('student-approval-detail-title');
+		
+		// Hide list, show detail panel
+		if (listPanel) listPanel.style.display = 'none';
+		if (detailPanel) detailPanel.style.display = 'block';
+		
+		loadingDiv.style.display = 'block';
+		contentDiv.style.display = 'none';
+		errorDiv.style.display = 'none';
+		
+		try {
+			const response = await fetch(`/api/hod/student/${encodeURIComponent(rollNumber)}/pending-approvals`);
+			const data = await response.json();
+			
+			if (!response.ok) {
+				throw new Error(data.error || 'Failed to load student approvals');
+			}
+			
+			titleDiv.textContent = `${data.student.name} (${data.student.rollNumber}) - Approvals`;
+			// Add HOD final-approve button (enabled only when overallStatus is Approved)
+			const canFinalApprove = (data.overallStatus === 'Approved');
+			let finalBtnHtml = '';
+			if (canFinalApprove) {
+				finalBtnHtml = `<button id="hod-final-approve-btn" class="btn btn-accent">Toggle HOD Final Approval</button>`;
+			} else {
+				finalBtnHtml = `<button id="hod-final-approve-btn" class="btn btn-outline" disabled>Final approval inactive</button>`;
+			}
+			if (titleDiv) titleDiv.insertAdjacentHTML('afterend', `<div style="margin-top:8px;margin-bottom:8px;">${finalBtnHtml}</div>`);
+			let html = '<div class="stack">';
+			html += `<div style="background:#f5f5f5;padding:12px;border-radius:4px;margin-bottom:16px;">
+				<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+					<div><strong>Roll:</strong> ${data.student.rollNumber}</div>
+					<div><strong>Name:</strong> ${data.student.name}</div>
+					<div><strong>Department:</strong> ${data.student.department || 'N/A'}</div>
+					<div><strong>Year:</strong> ${data.student.year || 'N/A'} | <strong>Section:</strong> ${data.student.section || 'N/A'}</div>
+				</div>
+			</div>`;
+			
+			if (!data.pendingApprovals || data.pendingApprovals.length === 0) {
+				html += '<p class="muted">No pending approvals for this student.</p>';
+			} else {
+				html += '<form id="student-approvals-form" class="stack">';
+				
+				// Build table
+				html += `<div style="overflow-x:auto;margin-bottom:16px;">
+					<table style="width:100%;border-collapse:collapse;font-size:0.95em;">
+						<thead>
+							<tr style="background:#2c3e50;color:white;border-bottom:2px solid #1a252f;">
+								<th style="padding:10px;text-align:center;width:50px;">
+									<input type="checkbox" id="select-all-checkbox" onclick="toggleAllCheckboxes()" />
+								</th>
+								<th style="padding:10px;text-align:left;">Faculty</th>
+								<th style="padding:10px;text-align:left;">Subject</th>
+								<th style="padding:10px;text-align:center;">Code</th>
+								<th style="padding:10px;text-align:center;">Status</th>
+								<th style="padding:10px;text-align:left;">Reason</th>
+								<th style="padding:10px;text-align:left;">Faculty Note</th>
+							</tr>
+						</thead>
+						<tbody>`;
+				
+				let rowCount = 0;
+				data.pendingApprovals.forEach(faculty => {
+					faculty.requests.forEach(req => {
+						rowCount++;
+						const bgColor = rowCount % 2 === 0 ? '#ffffff' : '#f9f9f9';
+						const statusColor = req.status === 'Approved' ? '#4caf50' : req.status === 'Rejected by Faculty' || req.status === 'Rejected by HOD' ? '#f44336' : '#ff9800';
+						
+						html += `<tr style="background:${bgColor};border-bottom:1px solid #e0e0e0;">
+							<td style="padding:10px;text-align:center;">
+								<input type="checkbox" value="${req.id}" name="requestIds" />
+							</td>
+							<td style="padding:10px;font-weight:500;color:#2196F3;">${faculty.facultyName || 'Unassigned'}</td>
+							<td style="padding:10px;">${req.subjectName}</td>
+							<td style="padding:10px;text-align:center;font-weight:600;">${req.subjectCode}</td>
+							<td style="padding:10px;text-align:center;">
+								<span style="background:${statusColor};color:white;padding:4px 8px;border-radius:3px;font-size:0.85em;font-weight:500;">
+									${req.status}
+								</span>
+							</td>
+							<td style="padding:10px;font-size:0.9em;color:#666;">${req.reason || '-'}</td>
+							<td style="padding:10px;font-size:0.9em;color:#666;">${req.facultyNote || '-'}</td>
+						</tr>`;
+					});
+				});
+				
+				html += `</tbody>
+					</table>
+				</div>`;
+				
+				html += `<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
+					<button type="button" class="btn btn-accent" onclick="approveSelectedRequests()">
+						Force Approve Selected
+					</button>
+					<button type="button" class="btn btn-outline-primary" onclick="clearSelectedRequests()">
+						Clear Selection
+					</button>
+					<span id="selection-count" class="muted" style="align-self:center;margin-left:auto;"></span>
+				</div>
+				</form>`;
+			}
+			
+			html += '</div>';
+			contentDiv.innerHTML = html;
+
+			// wire final approve button if present
+			const finalBtnEl = document.getElementById('hod-final-approve-btn');
+			if (finalBtnEl) {
+				finalBtnEl.addEventListener('click', async () => {
+					try {
+						await fetch(`/hod/students/${encodeURIComponent(data.student.rollNumber)}/final-approve`, { method: 'POST' });
+					} catch (err) {
+						console.error('Failed to toggle final approval', err);
+					}
+					location.reload();
+				});
+			}
+			
+			// Add event listener for select-all checkbox
+			setTimeout(() => {
+				const selectAllCheckbox = document.getElementById('select-all-checkbox');
+				if (selectAllCheckbox) {
+					selectAllCheckbox.addEventListener('change', function() {
+						const checkboxes = document.querySelectorAll('input[name="requestIds"]');
+						checkboxes.forEach(cb => cb.checked = this.checked);
+						updateSelectionCount();
+					});
+				}
+				
+				// Add event listeners to individual checkboxes
+				const checkboxes = document.querySelectorAll('input[name="requestIds"]');
+				checkboxes.forEach(cb => {
+					cb.addEventListener('change', updateSelectionCount);
+				});
+			}, 0);
+			
+			loadingDiv.style.display = 'none';
+			contentDiv.style.display = 'block';
+		} catch (err) {
+			console.error('Error loading student approvals:', err);
+			errorDiv.textContent = 'Error: ' + (err.message || 'Failed to load approvals');
+			loadingDiv.style.display = 'none';
+			errorDiv.style.display = 'block';
+		}
+	};
+
+	window.toggleAllCheckboxes = function() {
+		const selectAllCheckbox = document.getElementById('select-all-checkbox');
+		const checkboxes = document.querySelectorAll('input[name="requestIds"]');
+		checkboxes.forEach(cb => cb.checked = selectAllCheckbox.checked);
+		updateSelectionCount();
+	};
+
+	window.updateSelectionCount = function() {
+		const checkboxes = document.querySelectorAll('input[name="requestIds"]:checked');
+		const countSpan = document.getElementById('selection-count');
+		if (countSpan) {
+			countSpan.textContent = checkboxes.length > 0 ? `${checkboxes.length} selected` : '';
+		}
+	};
+
+	window.backToStudentList = function() {
+		const listPanel = document.querySelector('[data-panel="student-list-by-department"]');
+		const detailPanel = document.querySelector('[data-panel="student-approval-detail"]');
+		if (listPanel) listPanel.style.display = 'block';
+		if (detailPanel) detailPanel.style.display = 'none';
+	};
+
+	window.approveSelectedRequests = async function() {
+		const form = document.getElementById('student-approvals-form');
+		const checkboxes = form.querySelectorAll('input[name="requestIds"]:checked');
+		if (checkboxes.length === 0) {
+			showToast('✗ No requests selected', 2000);
+			return;
+		}
+
+		const requestIds = Array.from(checkboxes).map(cb => cb.value);
+		
+		try {
+			const response = await fetch('/hod/requests/force-approve', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ requestIds, redirectPanel: 'student-list-by-department' })
+			});
+			
+			const data = await response.json();
+			if (!response.ok) throw new Error(data.error || 'Failed to approve');
+			
+			showToast('✓ ' + data.message, 2000);
+			setTimeout(() => {
+				window.location.href = data.redirectUrl;
+			}, 1000);
+		} catch (err) {
+			console.error('Error approving requests:', err);
+			showToast('✗ ' + err.message, 2000);
+		}
+	};
+
+	window.clearSelectedRequests = function() {
+		const form = document.getElementById('student-approvals-form');
+		const checkboxes = form.querySelectorAll('input[name="requestIds"]');
+		const selectAllCheckbox = document.getElementById('select-all-checkbox');
+		checkboxes.forEach(cb => cb.checked = false);
+		if (selectAllCheckbox) selectAllCheckbox.checked = false;
+		updateSelectionCount();
+	};
 })();
 </script>
 

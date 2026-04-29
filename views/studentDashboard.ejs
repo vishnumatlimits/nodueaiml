@@ -3,6 +3,15 @@
 <section class="grid two">
   <div class="card">
     <h1>Request No-Due</h1>
+    <% if (hodApproval && hodApproval.approved) { %>
+    <div style="margin-bottom:10px;">
+      <div class="pill" style="background:#0ea5a4;color:#fff;">HOD: Approved on <%= (new Date(hodApproval.approvedAt || hodApproval.updatedAt)).toLocaleDateString() %></div>
+    </div>
+    <% } else if (hodApproval && !hodApproval.approved) { %>
+    <div style="margin-bottom:10px;">
+      <div class="pill" style="background:#f59e0b;color:#fff;">HOD: Not approved</div>
+    </div>
+    <% } %>
     <% if (typeof error !== 'undefined' && error) { %>
     <div class="alert"><%= error %></div>
     <% } %>
