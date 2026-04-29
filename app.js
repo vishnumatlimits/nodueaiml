@@ -1729,8 +1729,9 @@ const renderHodDashboard = async (req, res, extras = {}) => {
     pendingRequests = allRequests.filter(
       (r) => r.status === 'Pending HOD' && !isMentorRequest(r) && !isObjectiveRequest(r),
     );
-    pendingMentorRequests = pendingRequests.filter((r) => {
-      return isMentorRequest(r);
+    // Get pending mentor requests directly from allRequests (not from pendingRequests which already excludes them)
+    pendingMentorRequests = allRequests.filter((r) => {
+      return isMentorRequest(r) && r.status !== 'Approved';
     });
     hodMentorRequests = allRequests.filter((r) => {
       return r.facultyId === self.facultyId && isMentorRequest(r);
