@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const session = require('express-session');
 const morgan = require('morgan');
+const dns = require('dns');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
@@ -9,6 +10,22 @@ const crypto = require('crypto');
 const { ConfidentialClientApplication } = require('@azure/msal-node');
 
 require('dotenv').config();
+
+const mongoDnsServers = (process.env.MONGO_DNS_SERVERS || '')
+  .split(',')
+  .map((server) => server.trim())
+  .filter(Boolean);
+
+if (mongoDnsServers.length > 0) {
+  try {
+    dns.setServers(mongoDnsServers);
+    // eslint-disable-next-line no-console
+    console.log(`Using custom DNS servers for Mongo lookup: ${mongoDnsServers.join(', ')}`);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('Failed to apply MONGO_DNS_SERVERS. Falling back to system DNS.', err?.message || err);
+  }
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -216,7 +233,7 @@ app.use(
 );
 
 mongoose
-  .connect(process.env.MONGO_URI, {
+  .connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/nodue', {
     dbName: 'nodue',
   })
   .then(async () => {
@@ -261,6 +278,10 @@ mongoose
   .catch((err) => {
     // eslint-disable-next-line no-console
     console.error('MongoDB connection error', err);
+    if (err && err.code === 'ECONNREFUSED' && String(err.hostname || '').includes('_mongodb._tcp')) {
+      // eslint-disable-next-line no-console
+      console.error('Atlas DNS lookup failed. Set MONGO_URI to a reachable MongoDB connection string or start a local MongoDB instance.');
+    }
   });
 
 const studentSchema = new mongoose.Schema(

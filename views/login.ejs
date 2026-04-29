@@ -8,30 +8,6 @@
       <div class="alert"><%= searchError %></div>
     <% } %>
     
-    <!-- Default HOD Approval Status for All Students -->
-    <div id="default-hod-status" style="margin-bottom:16px;background:<% if (!searchResult) { %>#fef3c7<% } else if (searchResult && searchResult.hodApproval && searchResult.hodApproval.approved) { %>#d1fae5<% } else { %>#fef3c7<% } %>;border:2px solid <% if (!searchResult) { %>#f59e0b<% } else if (searchResult && searchResult.hodApproval && searchResult.hodApproval.approved) { %>#10b981<% } else { %>#f59e0b<% } %>;padding:16px;border-radius:8px;transition:all 0.3s ease;">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div>
-          <div id="hod-status-text" style="font-weight:700;font-size:1.1em;color:<% if (!searchResult) { %>#92400e<% } else if (searchResult && searchResult.hodApproval && searchResult.hodApproval.approved) { %>#065f46<% } else { %>#92400e<% } %>;">
-            <% if (!searchResult) { %>
-              ⏳ WAITING FOR HOD APPROVAL
-            <% } else if (searchResult && searchResult.hodApproval && searchResult.hodApproval.approved) { %>
-              ✓ HOD APPROVED
-            <% } else if (searchResult && searchResult.hodApproval && !searchResult.hodApproval.approved) { %>
-              ⏳ WAITING FOR HOD APPROVAL
-            <% } else { %>
-              ⏳ WAITING FOR HOD APPROVAL
-            <% } %>
-          </div>
-          <% if (searchResult && searchResult.hodApproval && searchResult.hodApproval.approved) { %>
-            <div id="hod-approval-date" style="font-size:0.9em;color:#047857;margin-top:4px;">
-              Approved on <%= (new Date(searchResult.hodApproval.approvedAt || searchResult.hodApproval.updatedAt)).toLocaleDateString() %>
-            </div>
-          <% } %>
-        </div>
-      </div>
-    </div>
-    
     <form method="POST" action="/student/search" class="stack" id="student-search-form">
       <label class="field">
         <span>Roll number</span>
@@ -45,6 +21,20 @@
 
 <% if (searchResult) { %>
   <section class="page">
+    <div id="default-hod-status" style="margin-bottom:16px;background:<%= searchResult.hodApproval && searchResult.hodApproval.approved ? '#d1fae5' : '#fef3c7' %>;border:2px solid <%= searchResult.hodApproval && searchResult.hodApproval.approved ? '#10b981' : '#f59e0b' %>;padding:16px;border-radius:8px;transition:all 0.3s ease;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="flex:1;">
+            <div id="hod-status-text" style="font-weight:700;font-size:1.1em;color:<%= searchResult.hodApproval && searchResult.hodApproval.approved ? '#065f46' : '#92400e' %>;">
+              <%= searchResult.hodApproval && searchResult.hodApproval.approved ? '✓ HOD APPROVED' : '⏳ PENDING HOD' %>
+            </div>
+            <% if (searchResult.hodApproval && searchResult.hodApproval.approved) { %>
+              <div id="hod-approval-date" style="font-size:0.9em;color:#047857;margin-top:4px;">
+                Approved on <%= (new Date(searchResult.hodApproval.approvedAt || searchResult.hodApproval.updatedAt)).toLocaleDateString() %>
+              </div>
+            <% } %>
+          </div>
+        </div>
+    </div>
     <div>
       <h2>Subjects for <%= searchResult.rollNumber %></h2>
       <% if (searchResult.student) { %>

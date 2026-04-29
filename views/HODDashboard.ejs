@@ -372,17 +372,17 @@
 														</summary>
 														<div style="margin-top:6px;margin-left:12px;display:flex;flex-direction:column;gap:4px;">
 															<% section.students.forEach(function(student){ %>
-																<div style="display:flex;justify-content:space-between;align-items:center;padding:6px;background:#f9f9f9;border-radius:4px;" class="student-row">
+																<div style="display:flex;justify-content:space-between;align-items:center;padding:6px;background:#f9f9f9;border-radius:4px;" class="student-row" data-roll-number="<%= student.rollNumber %>">
 																	<div style="flex:1;cursor:pointer;" onclick="loadStudentApprovals('<%= student.rollNumber %>', event)">
 																		<strong><%= student.rollNumber %></strong>
 																		<span class="muted"> - <%= student.name %></span>
 																	</div>
 																	<div style="display:flex;gap:6px;align-items:center;">
-																		<span class="badge" style="<%= student.approvalStatus === 'Approved' ? 'background:#4caf50;color:white;' : 'background:#ff9800;color:white;' %>">
+																		<span class="badge student-approval-badge" data-roll-number="<%= student.rollNumber %>" style="<%= student.approvalStatus === 'Approved' ? 'background:#4caf50;color:white;' : 'background:#ff9800;color:white;' %>">
 																			<%= student.approvalStatus %>
 																		</span>
 																		<% if (student.approvalStatus === 'Approved') { %>
-																			<button class="btn btn-sm" style="<%= student.hodApproval && student.hodApproval.approved ? 'background:#10b981;color:white;' : 'background:#d1d5db;color:#374151;' %>" onclick="toggleHodApproval('<%= student.rollNumber %>', event)" title="<%= student.hodApproval && student.hodApproval.approved ? 'HOD Approved on ' + new Date(student.hodApproval.approvedAt || student.hodApproval.updatedAt).toLocaleDateString() : 'Click to approve' %>">
+																			<button class="btn btn-sm hod-approval-btn" data-roll-number="<%= student.rollNumber %>" style="<%= student.hodApproval && student.hodApproval.approved ? 'background:#10b981;color:white;' : 'background:#d1d5db;color:#374151;' %>" onclick="toggleHodApproval('<%= student.rollNumber %>', event)" title="<%= student.hodApproval && student.hodApproval.approved ? 'HOD Approved on ' + new Date(student.hodApproval.approvedAt || student.hodApproval.updatedAt).toLocaleDateString() : 'Click to approve' %>">
 																				<%= student.hodApproval && student.hodApproval.approved ? '✓ HOD Approved' : 'HOD Approve' %>
 																			</button>
 																		<% } %>
@@ -2169,6 +2169,7 @@ window.editObjectiveApproval = async (btn) => {
 		// Hide list, show detail panel
 		if (listPanel) listPanel.style.display = 'none';
 		if (detailPanel) detailPanel.style.display = 'block';
+		if (detailPanel) detailPanel.dataset.currentRoll = rollNumber;
 		
 		loadingDiv.style.display = 'block';
 		contentDiv.style.display = 'none';
@@ -2188,8 +2189,6 @@ window.editObjectiveApproval = async (btn) => {
 			let finalBtnHtml = '';
 			if (canFinalApprove) {
 				finalBtnHtml = `<button id="hod-final-approve-btn" class="btn btn-accent">Toggle HOD Final Approval</button>`;
-			} else {
-				finalBtnHtml = `<button id="hod-final-approve-btn" class="btn btn-outline" disabled>Final approval inactive</button>`;
 			}
 			if (titleDiv) titleDiv.insertAdjacentHTML('afterend', `<div style="margin-top:8px;margin-bottom:8px;">${finalBtnHtml}</div>`);
 			let html = '<div class="stack">';
@@ -2268,40 +2267,42 @@ window.editObjectiveApproval = async (btn) => {
 			
 			html += '</div>';
 			contentDiv.innerHTML = html;
+			loadingDiv.style.display = 'none';
+			contentDiv.style.display = 'block';
 
 			// wire final approve button if present
 			const finalBtnEl = document.getElementById('hod-final-approve-btn');
 			if (finalBtnEl) {
 				finalBtnEl.addEventListener('click', async () => {
 					try {
-					const response = await fetch(`/hod/students/${encodeURIComponent(data.student.rollNumber)}/final-approve`, { method: 'POST' });
-					if (response.ok) {
-						showToast('✓ HOD Approval updated', 1500);
-						// Update default status box if on login page
-						const statusBox = document.getElementById('default-hod-status');
-						if (statusBox) {
-							statusBox.style.background = '#d1fae5';
-							statusBox.style.borderColor = '#10b981';
-							const statusText = statusBox.querySelector('#hod-status-text');
-							if (statusText) {
-								statusText.style.color = '#065f46';
-								statusText.textContent = '✓ HOD APPROVED';
+						const response = await fetch(`/hod/students/${encodeURIComponent(data.student.rollNumber)}/final-approve`, { method: 'POST' });
+						if (response.ok) {
+							showToast('✓ HOD Approval updated', 1500);
+							const statusBox = document.getElementById('default-hod-status');
+							if (statusBox) {
+								statusBox.style.background = '#d1fae5';
+								statusBox.style.borderColor = '#10b981';
+								const statusText = statusBox.querySelector('#hod-status-text');
+								if (statusText) {
+									statusText.style.color = '#065f46';
+									statusText.textContent = '✓ HOD APPROVED';
+								}
+								let dateDiv = statusBox.querySelector('#hod-approval-date');
+								if (!dateDiv) {
+									dateDiv = document.createElement('div');
+									dateDiv.id = 'hod-approval-date';
+									dateDiv.style.cssText = 'font-size:0.9em;color:#047857;margin-top:4px;';
+									const statusInner = statusBox.querySelector('div > div');
+									if (statusInner) statusInner.appendChild(dateDiv);
+								}
+								dateDiv.textContent = 'Approved on ' + new Date().toLocaleDateString();
 							}
-							let dateDiv = statusBox.querySelector('#hod-approval-date');
-							if (!dateDiv) {
-								dateDiv = document.createElement('div');
-								dateDiv.id = 'hod-approval-date';
-								dateDiv.style.cssText = 'font-size:0.9em;color:#047857;margin-top:4px;';
-								statusBox.querySelector('div > div').appendChild(dateDiv);
-							}
-							dateDiv.textContent = 'Approved on ' + new Date().toLocaleDateString();
 						}
+					} catch (err) {
+						console.error('Failed to toggle final approval', err);
+						showToast('✗ Failed to update approval', 2000);
 					}
-				} catch (err) {
-					console.error('Failed to toggle final approval', err);
-					showToast('✗ Failed to update approval', 2000);
-				}
-			});
+				});
 			}
 			
 			// Add event listeners for checkboxes
@@ -2344,6 +2345,48 @@ window.editObjectiveApproval = async (btn) => {
 		}
 	};
 
+	window.updateStudentRowStatus = function(rollNumber, approvalStatus, hodApproved) {
+		const normalizedRoll = (rollNumber || '').toString().trim().toUpperCase();
+		const row = Array.from(document.querySelectorAll('.student-row')).find((element) => {
+			const rowRoll = (element.getAttribute('data-roll-number') || '').toString().trim().toUpperCase();
+			return rowRoll === normalizedRoll;
+		});
+		if (!row) return;
+
+		const badge = row.querySelector('.student-approval-badge');
+		if (badge) {
+			badge.textContent = approvalStatus || 'Pending';
+			badge.style.background = approvalStatus === 'Approved' ? '#4caf50' : '#ff9800';
+			badge.style.color = 'white';
+		}
+
+		let btn = row.querySelector('.hod-approval-btn');
+		if (approvalStatus === 'Approved') {
+			if (!btn) {
+				const controls = row.querySelector('div[style*="display:flex;gap:6px;align-items:center;"]');
+				if (controls) {
+					btn = document.createElement('button');
+					btn.type = 'button';
+					btn.className = 'btn btn-sm hod-approval-btn';
+					btn.dataset.rollNumber = normalizedRoll;
+					btn.addEventListener('click', function(ev) {
+						toggleHodApproval(normalizedRoll, ev);
+					});
+					controls.appendChild(btn);
+				}
+			}
+
+			if (btn) {
+				btn.style.background = hodApproved ? '#10b981' : '#d1d5db';
+				btn.style.color = hodApproved ? 'white' : '#374151';
+				btn.textContent = hodApproved ? '✓ HOD Approved' : 'HOD Approve';
+				btn.title = hodApproved ? 'HOD Approved' : 'Click to approve';
+			}
+		} else if (btn) {
+			btn.remove();
+		}
+	};
+
 	window.backToStudentList = function() {
 		const listPanel = document.querySelector('[data-panel="student-list-by-department"]');
 		const detailPanel = document.querySelector('[data-panel="student-approval-detail"]');
@@ -2379,11 +2422,12 @@ window.editObjectiveApproval = async (btn) => {
 				cb.disabled = true;
 			});
 			updateSelectionCount();
+			const detailPanel = document.querySelector('[data-panel="student-approval-detail"]');
+			updateStudentRowStatus(detailPanel ? detailPanel.dataset.currentRoll : '', 'Approved', false);
 			
 			// Go back to student list and reload
 			setTimeout(() => {
 				backToStudentList();
-				location.reload();
 			}, 800);
 		} catch (err) {
 			console.error('Error approving requests:', err);
@@ -2421,7 +2465,9 @@ window.editObjectiveApproval = async (btn) => {
 				btn.style.color = 'white';
 				btn.textContent = '✓ HOD Approved';
 				btn.disabled = true;
+				btn.title = 'HOD Approved';
 			}
+			updateStudentRowStatus(rollNumber, 'Approved', true);
 			
 			// Update the default HOD status box on the page (for login page)
 			const statusBox = document.getElementById('default-hod-status');
