@@ -1564,7 +1564,12 @@
 		return activePanel ? activePanel.dataset.panel : '';
 	};
 	const activate = (name) => {
-		panels.forEach((p) => p.classList.toggle('active', p.dataset.panel === name));
+		panels.forEach((p) => {
+			const isActive = p.dataset.panel === name;
+			p.classList.toggle('active', isActive);
+			// Keep inline display in sync so panels with hardcoded display:none can still open.
+			p.style.display = isActive ? 'block' : 'none';
+		});
 		links.forEach((l) => l.classList.toggle('active', l.dataset.target === name));
 	};
 	links.forEach((link) => {
