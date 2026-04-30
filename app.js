@@ -215,6 +215,8 @@ app.use(
   }),
 );
 
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
 mongoose
   .connect(process.env.MONGO_URI, {
     dbName: 'nodue',
@@ -274,6 +276,12 @@ const studentSchema = new mongoose.Schema(
     semester: { type: String, trim: true },
     mentorFacultyId: { type: String, trim: true },
     mentorNotes: { type: String, trim: true },
+    hodApproval: {
+      approved: { type: Boolean, default: false },
+      approvedAt: { type: Date },
+      updatedAt: { type: Date },
+      approvedBy: { type: String, trim: true },
+    },
   },
   { timestamps: true },
 );
@@ -668,6 +676,80 @@ const buildHodAnalytics = ({ allRequests = [] }) => {
       ...overall,
       approvalRate: overallApprovalRate,
     },
+  };
+};
+
+const buildHodStudentPendingApprovals = async (rollNumber) => {
+  const normalizedRoll = (rollNumber || '').toString().trim();
+  if (!normalizedRoll) {
+    return null;
+  }
+
+  const student = await Student.findOne({
+    rollNumber: { $regex: `^${escapeRegex(normalizedRoll)}$`, $options: 'i' },
+  }).lean();
+  if (!student) {
+    return null;
+  }
+
+  const allRequests = await Request.find({ rollNumber: student.rollNumber }).sort({ createdAt: -1 }).lean();
+  const pendingRequests = allRequests.filter((request) => {
+    const status = (request.status || '').toString().trim();
+    return ['Pending Faculty', 'Pending HOD'].includes(status);
+  });
+
+  const facultyIds = Array.from(new Set(pendingRequests.map((request) => request.facultyId).filter(Boolean)));
+  const facultyMap = new Map();
+  if (facultyIds.length) {
+    const faculties = await Faculty.find({ facultyId: { $in: facultyIds } }).lean();
+    faculties.forEach((faculty) => {
+      facultyMap.set(faculty.facultyId, faculty.name || faculty.facultyId);
+    });
+  }
+
+  const groupMap = new Map();
+  pendingRequests.forEach((request) => {
+    const facultyId = (request.facultyId || '').toString().trim() || 'UNASSIGNED';
+    const facultyName = facultyMap.get(facultyId) || facultyId || 'Unassigned';
+    const key = facultyId;
+    if (!groupMap.has(key)) {
+      groupMap.set(key, {
+        facultyId: facultyId === 'UNASSIGNED' ? '' : facultyId,
+        facultyName,
+        requests: [],
+      });
+    }
+
+    groupMap.get(key).requests.push({
+      id: request._id.toString(),
+      subjectCode: request.subjectCode || '',
+      subjectName: request.subjectName || request.reason || 'No-due request',
+      status: request.status || 'Pending Faculty',
+      reason: request.reason || '',
+      facultyNote: request.facultyNote || '',
+      adminNote: request.adminNote || '',
+    });
+  });
+
+  const pendingApprovals = Array.from(groupMap.values()).map((group) => ({
+    ...group,
+    requests: group.requests.slice().sort(compareApprovalRows),
+  })).sort((a, b) => (a.facultyName || '').localeCompare(b.facultyName || ''));
+
+  return {
+    student: {
+      rollNumber: student.rollNumber,
+      name: student.name,
+      department: student.department || student.branch || '',
+      branch: student.branch || '',
+      year: student.year || '',
+      section: student.section || '',
+      semester: student.semester || '',
+      hodApproval: student.hodApproval || null,
+    },
+    pendingApprovals,
+    overallStatus: pendingApprovals.length ? 'Pending Faculty' : 'Approved',
+    totalPending: pendingRequests.length,
   };
 };
 
@@ -1601,6 +1683,7 @@ const renderHodDashboard = async (req, res, extras = {}) => {
   let pendingSubjectGroups = [];
   let pendingMentorRequests = [];
   let hodMentorRequests = [];
+  let studentsByDepartmentYearSection = [];
 
   try {
     students = await Student.find().sort({ rollNumber: 1 }).lean();
@@ -1608,6 +1691,54 @@ const renderHodDashboard = async (req, res, extras = {}) => {
     subjects = await Subject.find().sort({ subjectCode: 1 }).lean();
     mentorSubjects = await MentorSubject.find().sort({ code: 1 }).lean();
     objectiveApprovals = await ObjectiveApproval.find().sort({ createdAt: 1 }).lean();
+
+    const departmentMap = new Map();
+    students.forEach((student) => {
+      const department = (student.department || '').toString().trim() || 'Unassigned Department';
+      const year = (student.year || '').toString().trim() || 'No Year';
+      const section = (student.section || '').toString().trim() || 'No Section';
+
+      if (!departmentMap.has(department)) {
+        departmentMap.set(department, new Map());
+      }
+
+      const yearMap = departmentMap.get(department);
+      if (!yearMap.has(year)) {
+        yearMap.set(year, new Map());
+      }
+
+      const sectionMap = yearMap.get(year);
+      if (!sectionMap.has(section)) {
+        sectionMap.set(section, []);
+      }
+
+      sectionMap.get(section).push({
+        name: student.name || student.studentName || '-',
+        rollNumber: student.rollNumber || '-',
+        department,
+        year: student.year || '',
+        section: student.section || '',
+        approvalStatus: student.approvalStatus || 'Pending',
+        hodApproval: student.hodApproval || null,
+      });
+    });
+
+    studentsByDepartmentYearSection = Array.from(departmentMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([department, yearMap]) => ({
+        department,
+        years: Array.from(yearMap.entries())
+          .sort((a, b) => compareAcademicYear(a[0], b[0]))
+          .map(([year, sectionMap]) => ({
+            year,
+            sections: Array.from(sectionMap.entries())
+              .sort((a, b) => a[0].localeCompare(b[0]))
+              .map(([section, studentsInSection]) => ({
+                section,
+                students: studentsInSection.slice().sort((a, b) => (a.rollNumber || '').localeCompare(b.rollNumber || '')),
+              })),
+          })),
+      }));
 
     allRequests = await Request.find().sort({ createdAt: -1 }).lean();
     allRequests = allRequests.map((r) => ({ ...r, id: r._id.toString() }));
@@ -1667,6 +1798,7 @@ const renderHodDashboard = async (req, res, extras = {}) => {
     self,
     subjectGroups,
     hodSubjectGroups,
+    studentsByDepartmentYearSection,
     hodAnalytics,
     pendingSubjectGroups,
     dataError,
@@ -3020,6 +3152,143 @@ app.post('/hod/requests/approve-all-mentee', ensureRole('hod'), async (req, res)
   }
 
   return res.redirect(redirectToHodPanel(req, 'hod-mentee-data'));
+});
+
+app.get('/api/hod/student/:roll/pending-approvals', ensureRole('hod'), async (req, res) => {
+  try {
+    const payload = await buildHodStudentPendingApprovals(req.params.roll);
+    if (!payload) {
+      return res.status(404).json({ ok: false, error: 'Student not found.' });
+    }
+
+    return res.json({ ok: true, ...payload });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to load HOD student approvals', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load student approvals.' });
+  }
+});
+
+app.post('/hod/requests/force-approve', ensureRole('hod'), async (req, res) => {
+  const requestIds = Array.isArray(req.body?.requestIds)
+    ? req.body.requestIds
+    : (req.body?.requestIds || '').toString().split(',').map((value) => value.trim()).filter(Boolean);
+
+  if (!requestIds.length) {
+    return res.status(400).json({ ok: false, error: 'No requests selected.' });
+  }
+
+  try {
+    const result = await Request.updateMany(
+      { _id: { $in: requestIds } },
+      {
+        $set: {
+          status: 'Approved',
+          adminNote: 'Force approved by HOD',
+          assignment1: true,
+          assignment2: true,
+        },
+      },
+    );
+
+    return res.json({
+      ok: true,
+      message: 'Selected requests force approved.',
+      updatedCount: result.modifiedCount || result.nModified || 0,
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to force approve HOD requests', err);
+    return res.status(500).json({ ok: false, error: 'Failed to force approve selected requests.' });
+  }
+});
+
+app.post('/hod/students/:roll/final-approve', ensureRole('hod'), async (req, res) => {
+  const rollNumber = (req.params.roll || '').toString().trim();
+  if (!rollNumber) {
+    return res.status(400).json({ ok: false, error: 'Roll number is required.' });
+  }
+
+  try {
+    const student = await Student.findOne({
+      rollNumber: { $regex: `^${escapeRegex(rollNumber)}$`, $options: 'i' },
+    });
+    if (!student) {
+      return res.status(404).json({ ok: false, error: 'Student not found.' });
+    }
+
+    const nextApproved = !(student.hodApproval && student.hodApproval.approved);
+    student.hodApproval = {
+      approved: nextApproved,
+      approvedAt: nextApproved ? new Date() : null,
+      updatedAt: new Date(),
+      approvedBy: req.session?.user?.facultyId || req.session?.user?.name || 'HOD',
+    };
+
+    await student.save();
+
+    return res.json({
+      ok: true,
+      approved: nextApproved,
+      status: nextApproved ? 'Approved' : 'Pending',
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to toggle HOD student approval', err);
+    return res.status(500).json({ ok: false, error: 'Failed to update HOD approval.' });
+  }
+});
+
+app.get('/api/hod/force-approved', ensureRole('hod'), async (req, res) => {
+  try {
+    const approvedStudents = await Student.find({ 'hodApproval.approved': true })
+      .sort({ 'hodApproval.updatedAt': -1, rollNumber: 1 })
+      .lean();
+
+    const items = approvedStudents.map((student) => ({
+      rollNumber: student.rollNumber || '',
+      studentName: student.name || student.studentName || '-',
+      department: student.department || student.branch || 'Unassigned',
+      year: student.year || 'No Year',
+      section: student.section || 'No Section',
+      approved: true,
+      approvedAt: student.hodApproval?.approvedAt || null,
+      updatedAt: student.hodApproval?.updatedAt || student.updatedAt || null,
+      approvedBy: student.hodApproval?.approvedBy || null,
+    }));
+
+    const departmentMap = new Map();
+    items.forEach((item) => {
+      const department = item.department || 'Unassigned';
+      const year = item.year || 'No Year';
+      const section = item.section || 'No Section';
+
+      if (!departmentMap.has(department)) departmentMap.set(department, new Map());
+      const yearMap = departmentMap.get(department);
+      if (!yearMap.has(year)) yearMap.set(year, new Map());
+      const sectionMap = yearMap.get(year);
+      if (!sectionMap.has(section)) sectionMap.set(section, []);
+
+      sectionMap.get(section).push(item);
+    });
+
+    const groups = Array.from(departmentMap.entries()).map(([department, yearMap]) => ({
+      department,
+      years: Array.from(yearMap.entries()).map(([year, sectionMap]) => ({
+        year,
+        sections: Array.from(sectionMap.entries()).map(([section, students]) => ({
+          section,
+          students: students.slice().sort((a, b) => (a.rollNumber || '').localeCompare(b.rollNumber || '')),
+        })),
+      })),
+    }));
+
+    return res.json({ ok: true, items, groups });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to load HOD force-approved items', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load force-approved items.' });
+  }
 });
 
 // HOD maintenance: remove all approval requests from the database.

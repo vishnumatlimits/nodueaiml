@@ -1,4 +1,5 @@
 <% const pageTitle = 'HOD Dashboard'; %>
+<% const studentsByDepartmentYearSectionSafe = typeof studentsByDepartmentYearSection !== 'undefined' && Array.isArray(studentsByDepartmentYearSection) ? studentsByDepartmentYearSection : []; %>
 <%- include('partials/header', { title: pageTitle }) %>
 
 <div class="layout-wrap">
@@ -346,11 +347,11 @@
 					<h2 id="student-list-by-department">Student Approvals by Department</h2>
 					<span class="badge">Department / Year / Section</span>
 				</div>
-				<% if (!studentsByDepartmentYearSection || !studentsByDepartmentYearSection.length) { %>
+				<% if (!studentsByDepartmentYearSectionSafe.length) { %>
 					<p class="muted" style="margin-top:12px;">No students available.</p>
 				<% } else { %>
 					<div style="display:flex;flex-direction:column;gap:12px;margin-top:14px;">
-						<% studentsByDepartmentYearSection.forEach(function(dept){ %>
+						<% studentsByDepartmentYearSectionSafe.forEach(function(dept){ %>
 							<details class="card" style="border-left:4px solid #e0e0e0;">
 								<summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:12px;align-items:center;padding:8px;font-weight:600;">
 									<span><%= dept.department %></span>
