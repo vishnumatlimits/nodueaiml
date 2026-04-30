@@ -27,7 +27,7 @@
         <div class="panel active" data-panel="pending">
             <div class="flex-between">
                 <h1 id="pending">Approvals analytics</h1>
-                <span class="badge"><%= (facultyAnalytics && facultyAnalytics.overall ? facultyAnalytics.overall.actionablePending : pending.length) %> actionable pending</span>
+                <span class="badge" id="faculty-actionable-pending-badge"><%= (facultyAnalytics && facultyAnalytics.overall ? facultyAnalytics.overall.actionablePending : pending.length) %> actionable pending</span>
             </div>
 
             <div class="card" style="margin-top:12px;">
@@ -35,25 +35,25 @@
                 <div class="grid two" style="gap:12px;">
                     <div class="card" style="margin:0;padding:14px;">
                         <p class="muted" style="margin:0 0 4px;">Total approval records</p>
-                        <h2 style="margin:0;"><%= analytics.overall.total %></h2>
+                        <h2 style="margin:0;" id="faculty-total-records"><%= analytics.overall.total %></h2>
                     </div>
                     <div class="card" style="margin:0;padding:14px;">
                         <p class="muted" style="margin:0 0 4px;">Total students (category-wise sum)</p>
-                        <h2 style="margin:0;"><%= analytics.overall.students %></h2>
+                        <h2 style="margin:0;" id="faculty-total-students"><%= analytics.overall.students %></h2>
                     </div>
                     <div class="card" style="margin:0;padding:14px;">
                         <p class="muted" style="margin:0 0 4px;">Approved</p>
-                        <h2 style="margin:0;color:#0f766e;"><%= analytics.overall.approved %></h2>
+                        <h2 style="margin:0;color:#0f766e;" id="faculty-approved-count"><%= analytics.overall.approved %></h2>
                     </div>
                     <div class="card" style="margin:0;padding:14px;">
                         <p class="muted" style="margin:0 0 4px;">Pending your action</p>
-                        <h2 style="margin:0;color:#b45309;"><%= analytics.overall.actionablePending %></h2>
+                        <h2 style="margin:0;color:#b45309;" id="faculty-actionable-pending-count"><%= analytics.overall.actionablePending %></h2>
                     </div>
                 </div>
 
                 <div class="grid two" style="gap:14px;margin-top:14px;">
                     <div class="card" style="margin:0;padding:14px;">
-                        <h3 style="margin:0 0 10px;">Overall approval split (<%= analytics.overall.approvalRate %>%)</h3>
+                        <h3 style="margin:0 0 10px;">Overall approval split (<span id="faculty-overall-approval-rate"><%= analytics.overall.approvalRate %></span>%)</h3>
                         <canvas id="faculty-overall-pie" width="220" height="220" style="max-width:220px;"></canvas>
                         <div class="muted" id="faculty-overall-legend" style="margin-top:10px;"></div>
                     </div>
@@ -76,6 +76,7 @@
                             <th>Actionable pending</th>
                             <th>Approval %</th>
                         </tr>
+                        <tbody id="faculty-analytics-categories-body">
                         <% analytics.categories.forEach(function(c){ %>
                             <tr>
                                 <td><%= c.label %></td>
@@ -88,6 +89,7 @@
                                 <td><%= c.approvalRate %>%</td>
                             </tr>
                         <% }); %>
+                        </tbody>
                     </table>
                 </div>
 
@@ -96,7 +98,10 @@
                     <% if (!pending.length) { %>
                         <p class="muted" style="margin-top:10px;">No general pending requests require review right now.</p>
                     <% } else { %>
-                        <div style="margin-top:10px;">
+                        <div style="margin-top:10px;" data-backup-scope="pending">
+                            <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+                                <button type="button" class="btn btn-outline-primary btn-sm faculty-backup-save-btn" data-save-scope="pending">Backup save all</button>
+                            </div>
                             <table>
                                 <tr>
                                     <th>Student</th>
@@ -157,6 +162,7 @@
                                 <div class="flex-between" style="gap:12px;align-items:flex-start;flex-wrap:wrap;">
                                     <h3><%= group.subjectName %> <small style="font-weight:400;color:#6b7280;">(<%= group.subjectCode || 'Code N/A' %>)</small></h3>
                                     <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                        <button type="button" class="btn btn-outline-primary btn-sm faculty-backup-save-btn" data-save-scope="subject">Backup save all</button>
                                         <form action="/faculty/requests/approve-all" method="POST">
                                             <input type="hidden" name="scope" value="subject" />
                                             <input type="hidden" name="subjectCode" value="<%= group.subjectCode || '' %>" />
@@ -215,7 +221,7 @@
                         <% }); %>
                         <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center;">
                             <p style="color:#6b7280;font-size:0.9rem;margin:0;"><em>Auto-saves on each change</em></p>
-                            <span class="muted">Manual backup is handled by auto-save</span>
+                            <span class="muted">Manual backup save is available on each row</span>
                         </div>
                     </div>
                 <% } %>
@@ -261,7 +267,10 @@
                             <details class="card mentor-subject-card" data-mentor-subject="<%= subjectFilter %>" style="margin:0;">
                                 <summary class="flex-between" style="gap:10px;align-items:flex-start;cursor:pointer;list-style:none;">
                                     <h3 style="margin:0;"><%= subjectGroup.subjectName || subjectGroup.subjectCode || '-' %></h3>
-                                    <span class="badge"> <%= subjectGroup.years.length %> year group(s)</span>
+                                    <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                                        <span class="badge"> <%= subjectGroup.years.length %> year group(s)</span>
+                                        <button type="button" class="btn btn-outline-primary btn-sm faculty-backup-save-btn" data-save-scope="mentor">Backup save all</button>
+                                    </span>
                                 </summary>
 
                                 <div class="stack" style="margin-top:12px;gap:12px;">
@@ -370,6 +379,7 @@
                                 </span>
                                 <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                                     <span class="badge"><%= group.rows.length %> students</span>
+                                    <button type="button" class="btn btn-outline-primary btn-sm faculty-backup-save-btn" data-save-scope="objective">Backup save all</button>
                                     <form action="/faculty/requests/approve-all" method="POST" style="display:inline;">
                                         <input type="hidden" name="scope" value="objective" />
                                         <input type="hidden" name="objectiveCode" value="OBJECTIVE::<%= group.code %>" />
@@ -489,6 +499,7 @@
                 </div>
 
                 <div style="margin:10px 0 12px;display:flex;gap:8px;flex-wrap:wrap;">
+                    <button type="button" class="btn btn-outline-primary btn-sm faculty-backup-save-btn" data-save-scope="mentee">Backup save all</button>
                     <form action="/faculty/requests/approve-all" method="POST">
                         <input type="hidden" name="scope" value="mentor" />
                         <input type="hidden" name="redirectPanel" value="mentee-data" />
@@ -599,7 +610,21 @@
     let currentMentorSubject = '__all';
     let currentObjective = '__all';
     const analyticsDataNode = document.getElementById('faculty-analytics-data');
+    const analyticsActionableBadge = document.getElementById('faculty-actionable-pending-badge');
+    const analyticsTotalRecords = document.getElementById('faculty-total-records');
+    const analyticsTotalStudents = document.getElementById('faculty-total-students');
+    const analyticsApprovedCount = document.getElementById('faculty-approved-count');
+    const analyticsActionableCount = document.getElementById('faculty-actionable-pending-count');
+    const analyticsOverallRate = document.getElementById('faculty-overall-approval-rate');
+    const analyticsCategoriesBody = document.getElementById('faculty-analytics-categories-body');
     let analyticsData = null;
+
+    const escapeHtmlText = (value) => String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 
     if (analyticsDataNode && analyticsDataNode.textContent) {
         try {
@@ -608,6 +633,66 @@
             analyticsData = null;
         }
     }
+
+    const renderAnalyticsCategories = () => {
+        if (!analyticsCategoriesBody || !analyticsData || !Array.isArray(analyticsData.categories)) return;
+
+        analyticsCategoriesBody.innerHTML = analyticsData.categories.map((category) => `
+            <tr>
+                <td>${escapeHtmlText(category.label || '-')}</td>
+                <td>${escapeHtmlText(category.total || 0)}</td>
+                <td>${escapeHtmlText(category.students || 0)}</td>
+                <td>${escapeHtmlText(category.approved || 0)}</td>
+                <td>${escapeHtmlText(category.pending || 0)}</td>
+                <td>${escapeHtmlText(category.denied || 0)}</td>
+                <td>${escapeHtmlText(category.actionablePending || 0)}</td>
+                <td>${escapeHtmlText(category.approvalRate || 0)}%</td>
+            </tr>
+        `).join('');
+    };
+
+    const syncAnalyticsDom = () => {
+        if (!analyticsData || !analyticsData.overall) return;
+
+        if (analyticsActionableBadge) {
+            analyticsActionableBadge.textContent = `${analyticsData.overall.actionablePending || 0} actionable pending`;
+        }
+        if (analyticsTotalRecords) {
+            analyticsTotalRecords.textContent = analyticsData.overall.total || 0;
+        }
+        if (analyticsTotalStudents) {
+            analyticsTotalStudents.textContent = analyticsData.overall.students || 0;
+        }
+        if (analyticsApprovedCount) {
+            analyticsApprovedCount.textContent = analyticsData.overall.approved || 0;
+        }
+        if (analyticsActionableCount) {
+            analyticsActionableCount.textContent = analyticsData.overall.actionablePending || 0;
+        }
+        if (analyticsOverallRate) {
+            analyticsOverallRate.textContent = analyticsData.overall.approvalRate || 0;
+        }
+        if (analyticsDataNode) {
+            analyticsDataNode.textContent = JSON.stringify(analyticsData);
+        }
+
+        renderAnalyticsCategories();
+        renderAnalyticsCharts();
+    };
+
+    const refreshFacultyAnalytics = async () => {
+        try {
+            const response = await fetch('/faculty/analytics/status', {
+                headers: { 'Accept': 'application/json' },
+            });
+            if (!response.ok) return;
+            const payload = await response.json();
+            analyticsData = payload.analytics || analyticsData;
+            syncAnalyticsDom();
+        } catch (err) {
+            // keep the dashboard usable even if refresh fails
+        }
+    };
 
     const renderPieChart = (canvasId, legendId, segments) => {
         const canvas = document.getElementById(canvasId);
@@ -690,6 +775,10 @@
 
         renderPieChart('faculty-category-pie', 'faculty-category-legend', categorySegments);
     };
+
+    if (analyticsData) {
+        syncAnalyticsDom();
+    }
 
     const wrapTablesForScroll = () => {
         document.querySelectorAll('.content table').forEach((table) => {
@@ -1058,6 +1147,7 @@
                 
                 if (response.ok) {
                     showToast('✓ Saved successfully');
+                    refreshFacultyAnalytics();
                 } else {
                     showToast('⚠ Save failed', 2000);
                 }
@@ -1105,6 +1195,7 @@
                     
                     if (response.ok) {
                         showToast('✓ Mentee data saved');
+                        refreshFacultyAnalytics();
                     }
                 } catch (err) {
                     console.error('Mentee auto-save failed:', err);
@@ -1165,6 +1256,130 @@
 
                 if (!approveToggle.checked && !denyToggle.checked) {
                     action = 'pending';
+
+    const facultyBackupSaveButtons = Array.from(document.querySelectorAll('.faculty-backup-save-btn'));
+    if (facultyBackupSaveButtons.length) {
+        const saveFacultyStatusRow = async (row) => {
+            const requestId = row?.dataset?.requestId || '';
+            if (!requestId) return false;
+
+            const approveToggle = row.querySelector('.faculty-request-status-toggle[data-action="approve"]');
+            const denyToggle = row.querySelector('.faculty-request-status-toggle[data-action="deny"]');
+            const statusText = row.querySelector('.faculty-request-status-text');
+            if (!approveToggle || !denyToggle || !statusText) return false;
+
+            let action = 'pending';
+            if (approveToggle.checked && !denyToggle.checked) {
+                action = 'approve';
+            } else if (denyToggle.checked && !approveToggle.checked) {
+                action = 'deny';
+            }
+
+            const response = await fetch(`/faculty/requests/${encodeURIComponent(requestId)}/autosave-status`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ action }),
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result.ok) {
+                throw new Error(result.error || `Save failed: ${response.status}`);
+            }
+
+            if (result.status) {
+                statusText.textContent = result.status;
+            }
+            return true;
+        };
+
+        const saveFacultyBackupScope = async (button) => {
+            const saveScope = (button.dataset.saveScope || '').trim();
+            button.disabled = true;
+
+            try {
+                if (saveScope === 'subject') {
+                    const card = button.closest('.subject-group-card');
+                    if (!card) throw new Error('Subject card not found');
+
+                    const rows = Array.from(card.querySelectorAll('.faculty-subject-row'));
+                    const subjectCode = card.dataset.subject || '';
+                    const assignments = {};
+
+                    rows.forEach((row) => {
+                        const requestId = row.querySelector('input[type="checkbox"][name*="[assignment1]"]')?.name?.match(/assignments\[([^\]]+)\]/)?.[1]
+                            || row.querySelector('input[type="checkbox"][name*="[assignment2]"]')?.name?.match(/assignments\[([^\]]+)\]/)?.[1]
+                            || row.querySelector('input[type="text"][name*="[facultyNote]"]')?.name?.match(/assignments\[([^\]]+)\]/)?.[1]
+                            || '';
+                        if (!requestId) return;
+
+                        const assignment1 = row.querySelector('input[type="checkbox"][name*="[assignment1]"]');
+                        const assignment2 = row.querySelector('input[type="checkbox"][name*="[assignment2]"]');
+                        const facultyNote = row.querySelector('input[type="text"][name*="[facultyNote]"]');
+
+                        assignments[requestId] = {
+                            assignment1: !!assignment1?.checked,
+                            assignment2: !!assignment2?.checked,
+                            facultyNote: facultyNote?.value || '',
+                        };
+                    });
+
+                    const response = await fetch('/faculty/requests/bulk-assignments', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'fetch',
+                        },
+                        body: JSON.stringify({ assignments, subjectCode }),
+                    });
+                    const result = await response.json().catch(() => ({}));
+                    if (!response.ok || !result.ok) {
+                        throw new Error(result.error || `Backup save failed: ${response.status}`);
+                    }
+
+                    showToast(`✓ Backup saved ${result.updatedCount || rows.length} row(s)`);
+                    await refreshFacultyAnalytics();
+                    return;
+                }
+
+                let rows = [];
+                if (saveScope === 'pending') {
+                    rows = Array.from(document.querySelectorAll('[data-backup-scope="pending"] tr[data-request-id]'));
+                } else if (saveScope === 'mentor') {
+                    const card = button.closest('.mentor-subject-card');
+                    rows = card ? Array.from(card.querySelectorAll('.faculty-mentor-row')) : [];
+                } else if (saveScope === 'objective') {
+                    const card = button.closest('.objective-group-card');
+                    rows = card ? Array.from(card.querySelectorAll('.faculty-objective-row')) : [];
+                } else if (saveScope === 'mentee') {
+                    const table = document.querySelector('#mentee-table');
+                    rows = table ? Array.from(table.querySelectorAll('tr[data-request-id]')) : [];
+                }
+
+                let savedCount = 0;
+                for (const row of rows) {
+                    if (await saveFacultyStatusRow(row)) savedCount += 1;
+                }
+
+                showToast(`✓ Backup saved ${savedCount} row(s)`);
+                await refreshFacultyAnalytics();
+            } catch (err) {
+                console.error('Faculty backup save failed:', err);
+                showToast('✗ Backup save failed', 2000);
+            } finally {
+                button.disabled = false;
+            }
+        };
+
+        facultyBackupSaveButtons.forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                saveFacultyBackupScope(button);
+            });
+        });
+    }
                 }
 
                 approveToggle.disabled = true;
@@ -1175,6 +1390,7 @@
                     if (result && result.ok && result.status) {
                         statusText.textContent = result.status;
                         showToast('✓ Status saved');
+                        refreshFacultyAnalytics();
                     } else {
                         throw new Error('Invalid response');
                     }
@@ -1190,6 +1406,96 @@
             });
         });
     }
+
+    const updateSubjectBulkRows = (subjectCode, bulkAction) => {
+        if (!subjectCode) return;
+        const card = Array.from(document.querySelectorAll('.subject-group-card'))
+            .find((groupCard) => (groupCard.getAttribute('data-subject') || '') === subjectCode);
+        if (!card) return;
+
+        card.querySelectorAll('.faculty-subject-row').forEach((row) => {
+            const assignment1 = row.querySelector('input[type="checkbox"][name*="[assignment1]"]');
+            const assignment2 = row.querySelector('input[type="checkbox"][name*="[assignment2]"]');
+            const facultyNote = row.querySelector('input[type="text"][name*="[facultyNote]"]');
+
+            if (assignment1) assignment1.checked = bulkAction !== 'revoke';
+            if (assignment2) assignment2.checked = bulkAction !== 'revoke';
+            if (facultyNote) facultyNote.value = bulkAction === 'revoke' ? '' : (facultyNote.value || 'Approved by faculty (bulk)');
+        });
+    };
+
+    const updateMentorBulkRows = (bulkAction) => {
+        document.querySelectorAll('.mentor-subject-card .faculty-mentor-row').forEach((row) => {
+            const approveToggle = row.querySelector('.faculty-request-status-toggle[data-action="approve"]');
+            const denyToggle = row.querySelector('.faculty-request-status-toggle[data-action="deny"]');
+            const statusText = row.querySelector('.faculty-request-status-text');
+            if (approveToggle) approveToggle.checked = bulkAction !== 'revoke';
+            if (denyToggle) denyToggle.checked = false;
+            if (statusText) statusText.textContent = bulkAction === 'revoke' ? 'Pending Faculty' : 'Approved';
+        });
+    };
+
+    const updateObjectiveBulkRows = (objectiveCode, bulkAction) => {
+        const objectiveKey = (objectiveCode || '').replace(/^OBJECTIVE::/, '');
+        const cards = objectiveKey
+            ? Array.from(document.querySelectorAll('.objective-group-card')).filter((card) => (card.getAttribute('data-objective') || '') === objectiveKey)
+            : Array.from(document.querySelectorAll('.objective-group-card'));
+
+        cards.forEach((card) => {
+            card.querySelectorAll('.faculty-objective-row').forEach((row) => {
+                const approveToggle = row.querySelector('.faculty-request-status-toggle[data-action="approve"]');
+                const denyToggle = row.querySelector('.faculty-request-status-toggle[data-action="deny"]');
+                const statusText = row.querySelector('.faculty-request-status-text');
+                if (approveToggle) approveToggle.checked = bulkAction !== 'revoke';
+                if (denyToggle) denyToggle.checked = false;
+                if (statusText) statusText.textContent = bulkAction === 'revoke' ? 'Pending Faculty' : 'Approved';
+            });
+        });
+    };
+
+    const bulkApproveForms = Array.from(document.querySelectorAll('form[action="/faculty/requests/approve-all"]'));
+    bulkApproveForms.forEach((form) => {
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = new FormData(form);
+            const scope = (formData.get('scope') || '').toString().trim();
+            const bulkAction = (formData.get('bulkAction') || 'approve').toString().trim();
+            const subjectCode = (formData.get('subjectCode') || '').toString().trim();
+            const objectiveCode = (formData.get('objectiveCode') || '').toString().trim();
+
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'fetch',
+                    },
+                    body: new URLSearchParams(formData).toString(),
+                });
+
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok || !result.ok) {
+                    throw new Error(result.error || `Bulk save failed: ${response.status}`);
+                }
+
+                if (scope === 'subject') {
+                    updateSubjectBulkRows(subjectCode, bulkAction);
+                } else if (scope === 'mentor') {
+                    updateMentorBulkRows(bulkAction);
+                } else if (scope === 'objective') {
+                    updateObjectiveBulkRows(objectiveCode, bulkAction);
+                }
+
+                await refreshFacultyAnalytics();
+                showToast(`✓ Updated ${result.updatedCount || 0} request(s)`);
+            } catch (err) {
+                console.error('Bulk faculty action failed:', err);
+                showToast('✗ Bulk update failed', 2000);
+            }
+        });
+    });
 })();
 </script>
 

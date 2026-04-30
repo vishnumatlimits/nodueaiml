@@ -2,7 +2,6 @@ const express = require('express');
 const path = require('path');
 const session = require('express-session');
 const morgan = require('morgan');
-const dns = require('dns');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
@@ -10,22 +9,6 @@ const crypto = require('crypto');
 const { ConfidentialClientApplication } = require('@azure/msal-node');
 
 require('dotenv').config();
-
-const mongoDnsServers = (process.env.MONGO_DNS_SERVERS || '')
-  .split(',')
-  .map((server) => server.trim())
-  .filter(Boolean);
-
-if (mongoDnsServers.length > 0) {
-  try {
-    dns.setServers(mongoDnsServers);
-    // eslint-disable-next-line no-console
-    console.log(`Using custom DNS servers for Mongo lookup: ${mongoDnsServers.join(', ')}`);
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn('Failed to apply MONGO_DNS_SERVERS. Falling back to system DNS.', err?.message || err);
-  }
-}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -233,7 +216,7 @@ app.use(
 );
 
 mongoose
-  .connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/nodue', {
+  .connect(process.env.MONGO_URI, {
     dbName: 'nodue',
   })
   .then(async () => {
@@ -278,10 +261,6 @@ mongoose
   .catch((err) => {
     // eslint-disable-next-line no-console
     console.error('MongoDB connection error', err);
-    if (err && err.code === 'ECONNREFUSED' && String(err.hostname || '').includes('_mongodb._tcp')) {
-      // eslint-disable-next-line no-console
-      console.error('Atlas DNS lookup failed. Set MONGO_URI to a reachable MongoDB connection string or start a local MongoDB instance.');
-    }
   });
 
 const studentSchema = new mongoose.Schema(
@@ -369,19 +348,6 @@ const objectiveApprovalSchema = new mongoose.Schema(
 
 const ObjectiveApproval = mongoose.model('ObjectiveApproval', objectiveApprovalSchema);
 
-// HOD final approval per student (tracks final sign-off by HOD)
-const hodApprovalSchema = new mongoose.Schema(
-  {
-    rollNumber: { type: String, trim: true, index: true },
-    studentName: { type: String, trim: true },
-    approved: { type: Boolean, default: false },
-    approvedBy: { type: String, trim: true },
-    approvedAt: { type: Date },
-  },
-  { timestamps: true },
-);
-
-const HODApproval = mongoose.model('HODApproval', hodApprovalSchema);
 // Request schema: persists all clearance/assignment requests
 const requestSchema = new mongoose.Schema(
   {
@@ -705,99 +671,6 @@ const buildHodAnalytics = ({ allRequests = [] }) => {
   };
 };
 
-const buildStudentsByDepartmentYearSection = (students = [], allRequests = [], hodApprovals = []) => {
-  const deptMap = new Map();
-
-  students.forEach((student) => {
-    const dept = (student.department || student.branch || 'Unassigned').toString().trim();
-    const year = (student.year || 'No Year').toString().trim();
-    const section = (student.section || 'No Section').toString().trim();
-
-    if (!deptMap.has(dept)) {
-      deptMap.set(dept, new Map());
-    }
-    const yearMap = deptMap.get(dept);
-
-    if (!yearMap.has(year)) {
-      yearMap.set(year, new Map());
-    }
-    const sectionMap = yearMap.get(year);
-
-    if (!sectionMap.has(section)) {
-      sectionMap.set(section, []);
-    }
-    sectionMap.get(section).push(student);
-  });
-
-  // Calculate approval status for each student
-  const requestsByRoll = new Map();
-  allRequests.forEach((req) => {
-    const roll = (req.rollNumber || '').trim().toUpperCase();
-    if (!requestsByRoll.has(roll)) {
-      requestsByRoll.set(roll, []);
-    }
-    requestsByRoll.get(roll).push(req);
-  });
-
-  const getStudentApprovalStatus = (student) => {
-    const roll = (student.rollNumber || '').trim().toUpperCase();
-    const reqs = requestsByRoll.get(roll) || [];
-    
-    if (!reqs.length) return 'No Requests';
-    
-    const nonMentorNonObjective = reqs.filter((r) => !isMentorRequest(r) && !isObjectiveRequest(r));
-    const mentorReqs = reqs.filter((r) => isMentorRequest(r));
-    const objectiveReqs = reqs.filter((r) => isObjectiveRequest(r));
-    
-    const allApproved = (arr) => arr.length === 0 || arr.every((r) => r.status === 'Approved');
-    
-    const nonMentorStatus = allApproved(nonMentorNonObjective) ? 'approved' : 'pending';
-    const mentorStatus = allApproved(mentorReqs) ? 'approved' : 'pending';
-    const objectiveStatus = allApproved(objectiveReqs) ? 'approved' : 'pending';
-    
-    const statuses = [];
-    if (nonMentorNonObjective.length > 0) statuses.push(nonMentorStatus);
-    if (mentorReqs.length > 0) statuses.push(mentorStatus);
-    if (objectiveReqs.length > 0) statuses.push(objectiveStatus);
-    
-    if (statuses.length === 0) return 'No Requests';
-    if (statuses.every((s) => s === 'approved')) return 'Approved';
-    return 'Pending';
-  };
-
-  const result = Array.from(deptMap.entries())
-    .sort((a, b) => compareLabels(a[0], b[0]))
-    .map(([dept, yearMap]) => ({
-      department: dept,
-      years: Array.from(yearMap.entries())
-        .sort((a, b) => compareAcademicYear(a[0], b[0]))
-        .map(([year, sectionMap]) => ({
-          year,
-          sections: Array.from(sectionMap.entries())
-            .sort((a, b) => compareLabels(a[0], b[0]))
-            .map(([section, sectionStudents]) => ({
-              section,
-              students: sectionStudents
-                .sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber))
-                .map((student) => ({
-                  ...student,
-                  approvalStatus: getStudentApprovalStatus(student),
-                  // attach HOD final approval info if available
-                  hodApproval: (Array.isArray(hodApprovals) ? (hodApprovals.find((h) => {
-                    const hr = (h.rollNumber || '').trim().toUpperCase();
-                    const sr = (student.rollNumber || '').trim().toUpperCase();
-                    const hn = (h.studentName || '').trim().toLowerCase();
-                    const sn = (student.name || '').trim().toLowerCase();
-                    return (hr && hr === sr) || (hn && sn && hn === sn);
-                  }) || null) : null),
-                })),
-            })),
-        })),
-    }));
-
-  return result;
-};
-
 const groupMentorRequestsByYearSectionDepartment = (rows = []) => {
   const subjectMap = new Map();
 
@@ -934,8 +807,7 @@ const pickBestMentorRequest = (rows = []) => {
 const HOD_DASHBOARD_PANELS = new Set([
   'hod-subject-data',
   'hod-mentee-data',
-  'student-list-by-department',
-  'student-approval-detail',
+  'student-clearance-search',
   'manage-students',
   'manage-faculty',
   'manage-subjects',
@@ -1500,14 +1372,6 @@ const renderFacultyDashboard = async (req, res, extras = {}) => {
     return res.status(404).render('staffLogin', { error: 'Profile not found. Please log in again.' });
   }
 
-  // Auto-sync mentor requests for newly added mentor subjects
-  try {
-    await ensureMentorRequestsForFaculty(self.facultyId);
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to sync mentor requests for faculty dashboard', err);
-  }
-
   // Load requests for this faculty from DB
   let myRequests = [];
   try {
@@ -1750,9 +1614,8 @@ const renderHodDashboard = async (req, res, extras = {}) => {
     pendingRequests = allRequests.filter(
       (r) => r.status === 'Pending HOD' && !isMentorRequest(r) && !isObjectiveRequest(r),
     );
-    // Get pending mentor requests directly from allRequests (not from pendingRequests which already excludes them)
-    pendingMentorRequests = allRequests.filter((r) => {
-      return isMentorRequest(r) && r.status !== 'Approved';
+    pendingMentorRequests = pendingRequests.filter((r) => {
+      return isMentorRequest(r);
     });
     hodMentorRequests = allRequests.filter((r) => {
       return r.facultyId === self.facultyId && isMentorRequest(r);
@@ -1789,16 +1652,6 @@ const renderHodDashboard = async (req, res, extras = {}) => {
   }
 
   const hodAnalytics = buildHodAnalytics({ allRequests });
-  // load HOD final approvals to annotate students
-  let hodApprovals = [];
-  try {
-    hodApprovals = await HODApproval.find().lean();
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to load HOD approvals', err);
-  }
-
-  const studentsByDepartmentYearSection = buildStudentsByDepartmentYearSection(students, allRequests, hodApprovals);
 
   const payload = {
     pending: pendingRequests,
@@ -1807,7 +1660,6 @@ const renderHodDashboard = async (req, res, extras = {}) => {
     hodMentorRequests,
     hodMentorRequestGroups: groupMentorRequestsByYearSectionDepartment(hodMentorRequests),
     students,
-    studentsByDepartmentYearSection,
     faculties,
     subjects,
     mentorSubjects,
@@ -2218,18 +2070,6 @@ app.post('/student/search', async (req, res) => {
 
     const objectiveInfo = await loadObjectiveInfoForStudent(student);
 
-    // Load HOD final-approval for this student (by roll or name)
-    let hodApproval = null;
-    try {
-      hodApproval = await HODApproval.findOne({ rollNumber: student.rollNumber }).lean();
-      if (!hodApproval) {
-        hodApproval = await HODApproval.findOne({ studentName: student.name }).lean();
-      }
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to load HOD approval for login student view', err);
-    }
-
     return res.render('login', {
       error: null,
       searchError: null,
@@ -2239,7 +2079,6 @@ app.post('/student/search', async (req, res) => {
         subjects: subjectStatuses,
         mentorInfo,
         objectiveInfo,
-        hodApproval,
       },
     });
   } catch (err) {
@@ -2610,22 +2449,7 @@ app.get('/student', ensureRole('student'), async (req, res) => {
     // eslint-disable-next-line no-console
     console.error('Failed to load student requests', err);
   }
-  // try to load any HOD final-approval for this student (by rollNumber or name)
-  let hodApproval = null;
-  try {
-    const roll = (req.session.user && req.session.user.rollNumber) ? (req.session.user.rollNumber || '').trim() : '';
-    if (roll) {
-      hodApproval = await HODApproval.findOne({ rollNumber: roll }).lean();
-    }
-    if (!hodApproval) {
-      hodApproval = await HODApproval.findOne({ studentName: name }).lean();
-    }
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to load HOD approval for student', err);
-  }
-
-  res.render('studentDashboard', { requests: myRequests, hodApproval });
+  res.render('studentDashboard', { requests: myRequests });
 });
 
 app.post('/student/requests', ensureRole('student'), async (req, res) => {
@@ -2667,6 +2491,52 @@ app.post('/student/requests', ensureRole('student'), async (req, res) => {
 });
 
 app.get('/faculty', ensureRole('faculty', 'hod'), async (req, res) => renderFacultyDashboard(req, res));
+
+app.get('/faculty/analytics/status', ensureRole('faculty', 'hod'), async (req, res) => {
+  const self = await loadCurrentFaculty(req);
+  if (!self) {
+    return res.status(404).json({ error: 'Profile not found. Please log in again.' });
+  }
+
+  let myRequests = [];
+  try {
+    myRequests = await Request.find({
+      $or: [
+        { facultyId: self.facultyId },
+        { facultyId: { $exists: false } },
+        { facultyId: null },
+      ],
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+    myRequests = myRequests.map((r) => ({ ...r, id: r._id.toString() }));
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to load faculty analytics data', err);
+  }
+
+  const subjectRequests = myRequests.filter(
+    (r) => r.subjectCode && !isMentorRequest(r) && !isObjectiveRequest(r),
+  );
+  const generalRequests = myRequests.filter(
+    (r) => !r.subjectCode && !isMentorRequest(r) && !isObjectiveRequest(r),
+  );
+  const mentorRequests = myRequests.filter((r) => isMentorRequest(r));
+  const mentorSubjectRequests = mentorRequests
+    .filter((r) => (r.subjectCode || '').startsWith('MENTOR::'))
+    .slice()
+    .sort(compareApprovalRows);
+  const objectiveRequests = myRequests.filter((r) => isObjectiveRequest(r));
+
+  return res.json({
+    analytics: buildFacultyAnalytics({
+      generalRequests,
+      subjectRequests,
+      mentorSubjectRequests,
+      objectiveRequests,
+    }),
+  });
+});
 
 // Subject assignment toggles per student: two assignments per subject
 // NOTE: this route must be defined BEFORE the generic :action route below
@@ -2907,6 +2777,8 @@ app.post('/faculty/requests/approve-all', ensureRole('faculty', 'hod'), async (r
   const bulkAction = (req.body.bulkAction || 'approve').trim();
   const isHodUser = req.session?.user?.role === 'hod';
   const dashboardBase = isHodUser ? '/hod' : '/faculty';
+  const wantsJson = (req.get('accept') || '').includes('application/json') || req.xhr;
+  let updatedCount = 0;
 
   const self = await loadCurrentFaculty(req);
   if (!self || !self.facultyId) {
@@ -2920,295 +2792,84 @@ app.post('/faculty/requests/approve-all', ensureRole('faculty', 'hod'), async (r
 
   try {
     if (scope === 'mentor') {
-      await Request.updateMany(
-        {
-          ...baseFilter,
-          subjectCode: { $regex: '^MENTOR::' },
-        },
+      const filter = {
+        facultyId: self.facultyId,
+        subjectCode: { $regex: '^MENTOR::' },
+      };
+      if (bulkAction !== 'revoke') {
+        filter.status = 'Pending Faculty';
+      }
+      const result = await Request.updateMany(
+        filter,
         {
           $set: {
-            status: 'Approved',
-            facultyNote: 'Approved by faculty (bulk)',
-            assignment1: true,
-            assignment2: true,
+            status: bulkAction === 'revoke' ? 'Pending Faculty' : 'Approved',
+            facultyNote: bulkAction === 'revoke' ? '' : 'Approved by faculty (bulk)',
+            assignment1: bulkAction === 'revoke' ? false : true,
+            assignment2: bulkAction === 'revoke' ? false : true,
           },
         },
       );
+      updatedCount = result.modifiedCount || result.nModified || 0;
     } else if (scope === 'objective') {
       const filter = {
-        ...baseFilter,
+        facultyId: self.facultyId,
         subjectCode: { $regex: '^OBJECTIVE::' },
       };
+      if (bulkAction !== 'revoke') {
+        filter.status = 'Pending Faculty';
+      }
       if (objectiveCode) {
         filter.subjectCode = objectiveCode;
       }
 
-      await Request.updateMany(
+      const result = await Request.updateMany(
         filter,
         {
           $set: {
-            status: 'Approved',
-            facultyNote: 'Approved by faculty (bulk)',
-            assignment1: true,
+            status: bulkAction === 'revoke' ? 'Pending Faculty' : 'Approved',
+            facultyNote: bulkAction === 'revoke' ? '' : 'Approved by faculty (bulk)',
+            assignment1: bulkAction === 'revoke' ? false : true,
             assignment2: false,
           },
         },
       );
+      updatedCount = result.modifiedCount || result.nModified || 0;
     } else if (scope === 'subject' && subjectCode) {
       const filter = {
-        ...baseFilter,
+        facultyId: self.facultyId,
         subjectCode,
       };
-      if (bulkAction === 'revoke') {
-        await Request.updateMany(
-          filter,
-          {
-            $set: {
-              status: 'Pending Faculty',
-              facultyNote: '',
-              assignment1: false,
-              assignment2: false,
-            },
-          },
-        );
-      } else {
-        await Request.updateMany(
-          filter,
-          {
-            $set: {
-              status: 'Approved',
-              facultyNote: 'Approved by faculty (bulk)',
-              assignment1: true,
-              assignment2: true,
-            },
-          },
-        );
+      if (bulkAction !== 'revoke') {
+        filter.status = 'Pending Faculty';
       }
+
+      const result = await Request.updateMany(
+        filter,
+        {
+          $set: {
+            status: bulkAction === 'revoke' ? 'Pending Faculty' : 'Approved',
+            facultyNote: bulkAction === 'revoke' ? '' : 'Approved by faculty (bulk)',
+            assignment1: bulkAction === 'revoke' ? false : true,
+            assignment2: bulkAction === 'revoke' ? false : true,
+          },
+        },
+      );
+      updatedCount = result.modifiedCount || result.nModified || 0;
     }
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('Failed to bulk approve faculty requests', err);
   }
 
+  if (wantsJson) {
+    return res.json({ ok: true, scope, subjectCode, objectiveCode, bulkAction, updatedCount });
+  }
+
   return res.redirect(`${dashboardBase}#${targetPanel}`);
 });
 
 app.get('/hod', ensureRole('hod'), async (req, res) => renderHodDashboard(req, res));
-
-// API: list requests that were force-approved by HOD (adminNote contains marker)
-app.get('/api/hod/force-approved', ensureRole('hod'), async (req, res) => {
-  try {
-    const rows = await Request.find({
-      $or: [
-        { adminNote: /Force-approved by HOD/i },
-        { adminNote: /Cleared by HOD/i },
-      ],
-      status: 'Approved',
-    }).sort({ updatedAt: -1 }).lean();
-    const results = rows.map((r) => ({
-      id: r._id.toString(),
-      rollNumber: r.rollNumber,
-      studentName: r.studentName,
-      department: r.department || r.branch || 'Unassigned',
-      year: r.year || 'No Year',
-      section: r.section || 'No Section',
-      subjectCode: r.subjectCode || 'General',
-      subjectName: r.subjectName || r.reason || 'General',
-      facultyId: r.facultyId || null,
-      status: r.status,
-      approvedAt: r.updatedAt || r.createdAt,
-    }));
-
-    const deptMap = new Map();
-    results.forEach((row) => {
-      const dept = (row.department || 'Unassigned').toString().trim();
-      const year = (row.year || 'No Year').toString().trim();
-      const section = (row.section || 'No Section').toString().trim();
-      const studentKey = `${row.rollNumber || ''}::${(row.studentName || '').toLowerCase()}`;
-
-      if (!deptMap.has(dept)) deptMap.set(dept, new Map());
-      const yearMap = deptMap.get(dept);
-      if (!yearMap.has(year)) yearMap.set(year, new Map());
-      const sectionMap = yearMap.get(year);
-      if (!sectionMap.has(section)) sectionMap.set(section, new Map());
-      const studentMap = sectionMap.get(section);
-
-      if (!studentMap.has(studentKey)) {
-        studentMap.set(studentKey, {
-          rollNumber: row.rollNumber || '',
-          studentName: row.studentName || '-',
-          subjects: [],
-        });
-      }
-
-      studentMap.get(studentKey).subjects.push({
-        subjectName: row.subjectName || 'General',
-        subjectCode: row.subjectCode || 'General',
-      });
-    });
-
-    const groups = Array.from(deptMap.entries()).map(([department, yearMap]) => ({
-      department,
-      years: Array.from(yearMap.entries()).map(([year, sectionMap]) => ({
-        year,
-        sections: Array.from(sectionMap.entries()).map(([section, studentMap]) => ({
-          section,
-          students: Array.from(studentMap.values()).map((student) => ({
-            rollNumber: student.rollNumber,
-            studentName: student.studentName,
-            subjects: student.subjects,
-          })),
-        })),
-      })),
-    }));
-
-    return res.json({ items: results, groups });
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to fetch force-approved requests', err);
-    return res.status(500).json({ error: 'Failed to load data' });
-  }
-});
-
-// Fetch pending approvals for a specific student
-app.get('/api/hod/student/:rollNumber/pending-approvals', ensureRole('hod'), async (req, res) => {
-  const { rollNumber } = req.params;
-  if (!rollNumber) {
-    return res.status(400).json({ error: 'Roll number required' });
-  }
-
-  try {
-    const normalizedRoll = rollNumber.toString().trim().toUpperCase();
-    const student = await Student.findOne({ rollNumber: { $regex: `^${escapeRegex(normalizedRoll)}$`, $options: 'i' } }).lean();
-    
-    if (!student) {
-      return res.status(404).json({ error: 'Student not found' });
-    }
-
-    const allRequests = await Request.find({ rollNumber: student.rollNumber }).lean();
-    
-    // Filter pending requests (include mentor and objective requests as requested)
-    const pendingRequests = allRequests.filter((r) => r.status !== 'Approved');
-
-    // Group by faculty and subject
-    const groupedByFaculty = new Map();
-    pendingRequests.forEach((req) => {
-      const facultyId = req.facultyId || 'unassigned';
-      if (!groupedByFaculty.has(facultyId)) {
-        groupedByFaculty.set(facultyId, []);
-      }
-      groupedByFaculty.get(facultyId).push(req);
-    });
-
-    // Get faculty names
-    const facultyIds = Array.from(groupedByFaculty.keys()).filter((id) => id !== 'unassigned');
-    const faculties = facultyIds.length > 0 ? await Faculty.find({ facultyId: { $in: facultyIds } }).lean() : [];
-    const facultyMap = new Map(faculties.map((f) => [f.facultyId, f.name]));
-
-    const result = {
-      student: {
-        rollNumber: student.rollNumber,
-        name: student.name,
-        department: student.department || student.branch,
-        year: student.year,
-        section: student.section,
-      },
-      pendingApprovals: Array.from(groupedByFaculty.entries()).map(([facultyId, reqs]) => ({
-        facultyId,
-        facultyName: facultyMap.get(facultyId) || 'Unassigned',
-        requests: reqs.map((r) => ({
-          id: r._id.toString(),
-          subjectCode: r.subjectCode || 'General',
-          subjectName: r.subjectName || 'General Request',
-          status: r.status,
-          reason: r.reason,
-          facultyNote: r.facultyNote,
-        })),
-      })),
-    };
-
-    // compute overall approval status similar to buildStudentsByDepartmentYearSection
-    const nonMentorNonObjective = allRequests.filter((r) => !isMentorRequest(r) && !isObjectiveRequest(r));
-    const mentorReqs = allRequests.filter((r) => isMentorRequest(r));
-    const objectiveReqs = allRequests.filter((r) => isObjectiveRequest(r));
-    const allApproved = (arr) => arr.length === 0 || arr.every((r) => r.status === 'Approved');
-    const statuses = [];
-    if (nonMentorNonObjective.length > 0) statuses.push(allApproved(nonMentorNonObjective) ? 'approved' : 'pending');
-    if (mentorReqs.length > 0) statuses.push(allApproved(mentorReqs) ? 'approved' : 'pending');
-    if (objectiveReqs.length > 0) statuses.push(allApproved(objectiveReqs) ? 'approved' : 'pending');
-    let overallStatus = 'No Requests';
-    if (statuses.length === 0) overallStatus = 'No Requests';
-    else if (statuses.every((s) => s === 'approved')) overallStatus = 'Approved';
-    else overallStatus = 'Pending';
-
-    // include any existing HOD approval record
-    let hodApprovalRecord = null;
-    try {
-      hodApprovalRecord = await HODApproval.findOne({ rollNumber: student.rollNumber }).lean();
-      if (!hodApprovalRecord) {
-        hodApprovalRecord = await HODApproval.findOne({ studentName: student.name }).lean();
-      }
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to load HOD approval record', err);
-    }
-
-    result.overallStatus = overallStatus;
-    result.hodApproval = hodApprovalRecord || null;
-
-    return res.json(result);
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to fetch student pending approvals', err);
-    return res.status(500).json({ error: 'Failed to fetch student approvals' });
-  }
-});
-
-// HOD force-approve specific requests for a student
-app.post('/hod/requests/force-approve', ensureRole('hod'), async (req, res) => {
-  const requestIds = Array.isArray(req.body?.requestIds) ? req.body.requestIds : [];
-  const redirectPanel = (req.body?.redirectPanel || 'student-list-by-department').toString().trim();
-
-  if (!requestIds.length) {
-    return res.status(400).json({ error: 'No requests selected' });
-  }
-
-  try {
-    const objectIds = requestIds.map((id) => {
-      try {
-        return new (mongoose.mongo || mongoose.Types).ObjectId(id);
-      } catch (e) {
-        return null;
-      }
-    }).filter(Boolean);
-
-    if (objectIds.length === 0) {
-      return res.status(400).json({ error: 'Invalid request IDs' });
-    }
-
-    const result = await Request.updateMany(
-      { _id: { $in: objectIds } },
-      {
-        $set: {
-          status: 'Approved',
-          assignment1: true,
-          assignment2: true,
-          adminNote: 'Force-approved by HOD',
-        },
-      }
-    );
-
-    return res.json({
-      success: true,
-      message: `${result.modifiedCount} request(s) approved`,
-      redirectUrl: `/hod#${redirectPanel}`,
-    });
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to force-approve requests', err);
-    return res.status(500).json({ error: 'Failed to approve requests' });
-  }
-});
 
 app.get('/hod/background-tasks/status', ensureRole('hod'), (req, res) => {
   return res.json({
@@ -3563,38 +3224,6 @@ app.post('/hod/objective-approvals/:id/delete', ensureRole('hod'), async (req, r
   return res.redirect(redirectToHodPanel(req, 'manage-objective-approvals'));
 });
 
-// Update objective approval (change name, assigned faculty, years)
-app.post('/hod/objective-approvals/:id/update', ensureRole('hod'), async (req, res) => {
-  const { id } = req.params;
-  const rawName = (req.body.name || '').trim();
-  const facultyId = (req.body.facultyId || '').trim();
-  const yearsRaw = req.body.years;
-  const years = Array.isArray(yearsRaw)
-    ? yearsRaw.map((y) => (y || '').trim()).filter(Boolean)
-    : ((yearsRaw || '').trim() ? [(yearsRaw || '').trim()] : []);
-
-  if (!rawName) return res.redirect(redirectToHodPanel(req, 'manage-objective-approvals'));
-
-  try {
-    const updateDoc = { name: rawName };
-    if (facultyId) updateDoc.facultyId = facultyId;
-    if (Array.isArray(years) && years.length) updateDoc.years = years;
-
-    const updated = await ObjectiveApproval.findByIdAndUpdate(id, updateDoc, { new: true }).lean();
-    if (updated && updated.code) {
-      // sync request subjectName and optionally facultyId
-      const setDoc = { subjectName: rawName };
-      if (facultyId) setDoc.facultyId = facultyId;
-      await Request.updateMany({ subjectCode: `OBJECTIVE::${updated.code}` }, { $set: setDoc });
-    }
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to update objective approval', err);
-  }
-
-  return res.redirect(redirectToHodPanel(req, 'manage-objective-approvals'));
-});
-
 app.post('/hod/students', ensureRole('hod'), async (req, res) => {
   const {
     rollNumber,
@@ -3635,32 +3264,6 @@ app.post('/hod/students', ensureRole('hod'), async (req, res) => {
     console.error('Failed to upsert student', err);
   }
   return res.redirect(redirectToHodPanel(req, 'manage-students'));
-});
-
-// HOD final-approve toggle for a student
-app.post('/hod/students/:rollNumber/final-approve', ensureRole('hod'), async (req, res) => {
-  const { rollNumber } = req.params;
-  const actor = (req.session.user && req.session.user.facultyId) ? req.session.user.facultyId : 'HOD';
-
-  try {
-    const student = await Student.findOne({ rollNumber }).lean();
-    const studentName = student ? student.name : '';
-
-    let existing = await HODApproval.findOne({ rollNumber }).lean();
-    if (!existing) {
-      await HODApproval.create({ rollNumber, studentName, approved: true, approvedBy: actor, approvedAt: new Date() });
-    } else if (!existing.approved) {
-      await HODApproval.updateOne({ _id: existing._id }, { $set: { approved: true, approvedBy: actor, approvedAt: new Date() } });
-    } else {
-      // toggle off if already approved
-      await HODApproval.updateOne({ _id: existing._id }, { $set: { approved: false, approvedBy: actor, approvedAt: new Date() } });
-    }
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to toggle HOD final approval', err);
-  }
-
-  return res.redirect(redirectToHodPanel(req, 'student-list-by-department'));
 });
 
 app.post('/hod/students/import', ensureRole('hod'), upload.single('csv'), async (req, res) => {
@@ -4133,37 +3736,6 @@ app.post('/hod/mentor-subjects', ensureRole('hod'), async (req, res) => {
     // eslint-disable-next-line no-console
     console.error('Failed to upsert mentor subject', err);
   }
-  return res.redirect(redirectToHodPanel(req, 'manage-mentors'));
-});
-
-// Update mentor subject (change name / years)
-app.post('/hod/mentor-subjects/:id/update', ensureRole('hod'), async (req, res) => {
-  const { id } = req.params;
-  const rawName = (req.body.name || '').trim();
-  const yearsRaw = req.body.years;
-
-  if (!rawName) return res.redirect(redirectToHodPanel(req, 'manage-mentors'));
-
-  try {
-    const updateDoc = { name: rawName };
-    // Preserve existing applicable years when editor submits name-only updates.
-    if (typeof yearsRaw !== 'undefined') {
-      const years = Array.isArray(yearsRaw)
-        ? yearsRaw.map((y) => (y || '').trim()).filter(Boolean)
-        : ((yearsRaw || '').trim() ? [(yearsRaw || '').trim()] : []);
-      updateDoc.years = years;
-    }
-
-    const updated = await MentorSubject.findByIdAndUpdate(id, updateDoc, { new: true }).lean();
-    if (updated && updated.code) {
-      // keep requests in sync: update subjectName for mentor request rows
-      await Request.updateMany({ subjectCode: `MENTOR::${updated.code}` }, { $set: { subjectName: rawName } });
-    }
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to update mentor subject', err);
-  }
-
   return res.redirect(redirectToHodPanel(req, 'manage-mentors'));
 });
 
