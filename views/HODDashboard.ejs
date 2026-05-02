@@ -9,7 +9,7 @@
 		<a href="#hod-subject-data" data-target="hod-subject-data">Approvals</a>
 		<a href="#hod-mentee-data" data-target="hod-mentee-data">Mentee approvals</a>
 		<a href="#student-list-by-department" data-target="student-list-by-department">Student approvals</a>
-		<a href="#hod-force-approved" data-target="hod-force-approved">Force-approved students</a>
+		<a href="#hod-force-approved" data-target="hod-force-approved">HOD Approved students</a>
 		<a href="#manage-students" data-target="manage-students">Manage students</a>
 		<a href="#manage-faculty" data-target="manage-faculty">Manage faculty</a>
 		<a href="#manage-subjects" data-target="manage-subjects">Manage subjects</a>
@@ -419,8 +419,8 @@
 		<div class="panel" data-panel="hod-force-approved">
 			<div class="card">
 				<div class="flex-between">
-					<h2 id="hod-force-approved">Force-approved by HOD</h2>
-					<span class="badge">Recent force approvals</span>
+					<h2 id="hod-force-approved">HOD Approved students</h2>
+					<span class="badge">Recent approvals</span>
 				</div>
 				<div id="hod-force-approved-body" style="margin-top:12px;">
 					<div class="muted">Loading...</div>
@@ -1859,50 +1859,10 @@ const loadHodForceApproved = async () => {
 		const data = await res.json();
 		if (!res.ok) throw new Error(data.error || 'Load failed');
 
-		let groups = Array.isArray(data.groups) ? data.groups : [];
-		if (!groups.length && Array.isArray(data.items) && data.items.length) {
-			const deptMap = new Map();
-			data.items.forEach((it) => {
-				const department = it.department || 'Unassigned';
-				const year = it.year || 'No Year';
-				const section = it.section || 'No Section';
-				const studentKey = `${it.rollNumber || ''}::${(it.studentName || '-').toLowerCase()}`;
-
-				if (!deptMap.has(department)) deptMap.set(department, new Map());
-				const yearMap = deptMap.get(department);
-				if (!yearMap.has(year)) yearMap.set(year, new Map());
-				const sectionMap = yearMap.get(year);
-				if (!sectionMap.has(section)) sectionMap.set(section, new Map());
-				const studentMap = sectionMap.get(section);
-
-				if (!studentMap.has(studentKey)) {
-					studentMap.set(studentKey, {
-						rollNumber: it.rollNumber || '',
-						studentName: it.studentName || '-',
-						subjects: [],
-					});
-				}
-
-				studentMap.get(studentKey).subjects.push({
-					subjectName: it.subjectName || 'General',
-					subjectCode: it.subjectCode || 'General',
-				});
-			});
-
-			groups = Array.from(deptMap.entries()).map(([department, yearMap]) => ({
-				department,
-				years: Array.from(yearMap.entries()).map(([year, sectionMap]) => ({
-					year,
-					sections: Array.from(sectionMap.entries()).map(([section, studentMap]) => ({
-						section,
-						students: Array.from(studentMap.values()),
-					})),
-				})),
-			}));
-		}
+		const groups = Array.isArray(data.groups) ? data.groups : [];
 
 		if (!groups.length) {
-			container.innerHTML = '<p class="muted">No force-approved items found.</p>';
+			container.innerHTML = '<p class="muted">No HOD approved students found.</p>';
 			return;
 		}
 
@@ -1913,18 +1873,10 @@ const loadHodForceApproved = async () => {
 				html += `<details class="card" style="margin-top:8px;"><summary style="cursor:pointer;font-weight:600;">Year: ${yearGroup.year}</summary>`;
 				(yearGroup.sections || []).forEach((sectionGroup) => {
 					html += `<details class="card" style="margin-top:8px;"><summary style="cursor:pointer;font-weight:600;">Section: ${sectionGroup.section}</summary>`;
-					html += '<div class="table-responsive" style="margin-top:8px;"><table><tr><th>Student Name</th><th>Subject Name</th></tr>';
+					html += '<div class="table-responsive" style="margin-top:8px;"><table><tr><th>Roll Number</th><th>Student Name</th><th>Approved Date</th></tr>';
 					(sectionGroup.students || []).forEach((stu) => {
-						const subjects = Array.isArray(stu.subjects) ? stu.subjects : [];
-						if (!subjects.length) {
-							html += `<tr><td>${stu.studentName || '-'}</td><td>-</td></tr>`;
-							return;
-						}
-
-						html += `<tr><td><strong>${stu.studentName || '-'}</strong></td><td>${subjects[0].subjectName || '-'}</td></tr>`;
-						for (let i = 1; i < subjects.length; i += 1) {
-							html += `<tr><td></td><td>${subjects[i].subjectName || '-'}</td></tr>`;
-						}
+						const approvedDate = stu.updatedAt ? new Date(stu.updatedAt).toLocaleDateString() : '-';
+						html += `<tr><td>${stu.rollNumber || '-'}</td><td><strong>${stu.studentName || '-'}</strong></td><td>${approvedDate}</td></tr>`;
 					});
 					html += '</table></div>';
 					html += '</details>';
@@ -1936,7 +1888,7 @@ const loadHodForceApproved = async () => {
 		html += '</div>';
 		container.innerHTML = html;
 	} catch (err) {
-		console.error('Failed to load HOD force-approved items', err);
+		console.error('Failed to load HOD approved items', err);
 		container.innerHTML = `<div class="alert">Failed to load data</div>`;
 	}
 };

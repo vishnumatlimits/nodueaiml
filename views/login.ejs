@@ -21,15 +21,15 @@
 
 <% if (searchResult) { %>
   <section class="page">
-    <div id="default-hod-status" style="margin-bottom:16px;background:<%= searchResult.hodApproval && searchResult.hodApproval.approved ? '#d1fae5' : '#fef3c7' %>;border:2px solid <%= searchResult.hodApproval && searchResult.hodApproval.approved ? '#10b981' : '#f59e0b' %>;padding:16px;border-radius:8px;transition:all 0.3s ease;">
+    <div id="default-hod-status" style="margin-bottom:16px;background:<%= searchResult.student && searchResult.student.hodApproval && searchResult.student.hodApproval.approved ? '#d1fae5' : '#fef3c7' %>;border:2px solid <%= searchResult.student && searchResult.student.hodApproval && searchResult.student.hodApproval.approved ? '#10b981' : '#f59e0b' %>;padding:16px;border-radius:8px;transition:all 0.3s ease;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <div style="flex:1;">
-            <div id="hod-status-text" style="font-weight:700;font-size:1.1em;color:<%= searchResult.hodApproval && searchResult.hodApproval.approved ? '#065f46' : '#92400e' %>;">
-              <%= searchResult.hodApproval && searchResult.hodApproval.approved ? '✓ HOD APPROVED' : '⏳ PENDING HOD' %>
+            <div id="hod-status-text" style="font-weight:700;font-size:1.1em;color:<%= searchResult.student && searchResult.student.hodApproval && searchResult.student.hodApproval.approved ? '#065f46' : '#92400e' %>;">
+              <%= searchResult.student && searchResult.student.hodApproval && searchResult.student.hodApproval.approved ? '✓ HOD APPROVED' : '⏳ PENDING HOD' %>
             </div>
-            <% if (searchResult.hodApproval && searchResult.hodApproval.approved) { %>
+            <% if (searchResult.student && searchResult.student.hodApproval && searchResult.student.hodApproval.approved) { %>
               <div id="hod-approval-date" style="font-size:0.9em;color:#047857;margin-top:4px;">
-                Approved on <%= (new Date(searchResult.hodApproval.approvedAt || searchResult.hodApproval.updatedAt)).toLocaleDateString() %>
+                Approved on <%= (new Date(searchResult.student.hodApproval.approvedAt || searchResult.student.hodApproval.updatedAt)).toLocaleDateString() %>
               </div>
             <% } %>
           </div>

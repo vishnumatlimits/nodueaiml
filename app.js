@@ -1692,6 +1692,24 @@ const renderHodDashboard = async (req, res, extras = {}) => {
     mentorSubjects = await MentorSubject.find().sort({ code: 1 }).lean();
     objectiveApprovals = await ObjectiveApproval.find().sort({ createdAt: 1 }).lean();
 
+    // Load all requests first so we can determine student approval status
+    allRequests = await Request.find().sort({ createdAt: -1 }).lean();
+    allRequests = allRequests.map((r) => ({ ...r, id: r._id.toString() }));
+
+    // Build a map of roll numbers that have any pending requests (Subjects, Mentors, OR Objectives)
+    const studentPendingMap = new Map();
+    allRequests.forEach((r) => {
+      const rollNumber = (r.rollNumber || '').toString().trim().toUpperCase();
+      const status = (r.status || '').toString().trim();
+      
+      if (rollNumber && ['Pending Faculty', 'Pending HOD'].includes(status)) {
+        // Check if it's a subject, mentor, or objective request - any pending counts as pending
+        if (!studentPendingMap.has(rollNumber)) {
+          studentPendingMap.set(rollNumber, true);
+        }
+      }
+    });
+
     const departmentMap = new Map();
     students.forEach((student) => {
       const department = (student.department || '').toString().trim() || 'Unassigned Department';
@@ -1712,13 +1730,18 @@ const renderHodDashboard = async (req, res, extras = {}) => {
         sectionMap.set(section, []);
       }
 
+      // Determine approval status: Approved only if NO pending requests (subjects, mentors, OR objectives)
+      const normalizedRoll = (student.rollNumber || '').toString().trim().toUpperCase();
+      const hasPending = studentPendingMap.has(normalizedRoll);
+      const approvalStatus = hasPending ? 'Pending' : 'Approved';
+
       sectionMap.get(section).push({
         name: student.name || student.studentName || '-',
         rollNumber: student.rollNumber || '-',
         department,
         year: student.year || '',
         section: student.section || '',
-        approvalStatus: student.approvalStatus || 'Pending',
+        approvalStatus,
         hodApproval: student.hodApproval || null,
       });
     });
@@ -1740,8 +1763,6 @@ const renderHodDashboard = async (req, res, extras = {}) => {
           })),
       }));
 
-    allRequests = await Request.find().sort({ createdAt: -1 }).lean();
-    allRequests = allRequests.map((r) => ({ ...r, id: r._id.toString() }));
     pendingRequests = allRequests.filter(
       (r) => r.status === 'Pending HOD' && !isMentorRequest(r) && !isObjectiveRequest(r),
     );
@@ -3245,17 +3266,83 @@ app.get('/api/hod/force-approved', ensureRole('hod'), async (req, res) => {
       .sort({ 'hodApproval.updatedAt': -1, rollNumber: 1 })
       .lean();
 
-    const items = approvedStudents.map((student) => ({
-      rollNumber: student.rollNumber || '',
-      studentName: student.name || student.studentName || '-',
-      department: student.department || student.branch || 'Unassigned',
-      year: student.year || 'No Year',
-      section: student.section || 'No Section',
-      approved: true,
-      approvedAt: student.hodApproval?.approvedAt || null,
-      updatedAt: student.hodApproval?.updatedAt || student.updatedAt || null,
-      approvedBy: student.hodApproval?.approvedBy || null,
-    }));
+    // Fetch all requests for these students
+    const rollNumbers = approvedStudents.map((s) => s.rollNumber);
+    const allRequests = await Request.find({ rollNumber: { $in: rollNumbers } })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const items = approvedStudents.map((student) => {
+      // Get all requests for this student
+      const studentRequests = allRequests.filter(
+        (r) => (r.rollNumber || '').toString().trim().toUpperCase() === 
+                (student.rollNumber || '').toString().trim().toUpperCase()
+      );
+
+      // Extract unique subjects/mentors/objectives
+      const subjects = [];
+      const subjectSet = new Set();
+      studentRequests.forEach((r) => {
+        if (!isMentorRequest(r) && !isObjectiveRequest(r)) {
+          const key = `${r.subjectCode || 'GENERAL'}::${r.subjectName || 'General'}`;
+          if (!subjectSet.has(key)) {
+            subjectSet.add(key);
+            subjects.push({
+              subjectCode: r.subjectCode || 'GENERAL',
+              subjectName: r.subjectName || 'General Request',
+              status: r.status || 'Pending Faculty',
+            });
+          }
+        }
+      });
+
+      const mentors = [];
+      const mentorSet = new Set();
+      studentRequests.forEach((r) => {
+        if (isMentorRequest(r)) {
+          const key = `${r.subjectCode || r.reason}`;
+          if (!mentorSet.has(key)) {
+            mentorSet.add(key);
+            mentors.push({
+              subjectCode: r.subjectCode || '',
+              subjectName: r.reason || 'Mentor Subject',
+              status: r.status || 'Pending Faculty',
+            });
+          }
+        }
+      });
+
+      const objectives = [];
+      const objectiveSet = new Set();
+      studentRequests.forEach((r) => {
+        if (isObjectiveRequest(r)) {
+          const key = `${r.subjectCode || r.reason}`;
+          if (!objectiveSet.has(key)) {
+            objectiveSet.add(key);
+            objectives.push({
+              subjectCode: r.subjectCode || '',
+              subjectName: r.reason || 'Objective Approval',
+              status: r.status || 'Pending Faculty',
+            });
+          }
+        }
+      });
+
+      return {
+        rollNumber: student.rollNumber || '',
+        studentName: student.name || student.studentName || '-',
+        department: student.department || student.branch || 'Unassigned',
+        year: student.year || 'No Year',
+        section: student.section || 'No Section',
+        approved: true,
+        approvedAt: student.hodApproval?.approvedAt || null,
+        updatedAt: student.hodApproval?.updatedAt || student.updatedAt || null,
+        approvedBy: student.hodApproval?.approvedBy || null,
+        subjects,
+        mentors,
+        objectives,
+      };
+    });
 
     const departmentMap = new Map();
     items.forEach((item) => {
