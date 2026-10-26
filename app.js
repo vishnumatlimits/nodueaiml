@@ -356,6 +356,24 @@ const objectiveApprovalSchema = new mongoose.Schema(
 
 const ObjectiveApproval = mongoose.model('ObjectiveApproval', objectiveApprovalSchema);
 
+const studentSubjectAllocationSchema = new mongoose.Schema(
+  {
+    studentRollNumber: { type: String, required: true, trim: true, index: true },
+    subjectCode: { type: String, required: true, trim: true },
+    subjectName: { type: String, trim: true },
+    facultyId: { type: String, required: true, trim: true },
+    department: { type: String, trim: true },
+    branch: { type: String, trim: true },
+    year: { type: String, trim: true },
+    semester: { type: String, trim: true },
+    section: { type: String, trim: true },
+  },
+  { timestamps: true },
+);
+
+studentSubjectAllocationSchema.index({ studentRollNumber: 1, subjectCode: 1 }, { unique: true });
+const StudentSubjectAllocation = mongoose.model('StudentSubjectAllocation', studentSubjectAllocationSchema);
+
 // Request schema: persists all clearance/assignment requests
 const requestSchema = new mongoose.Schema(
   {
@@ -466,6 +484,64 @@ const compareApprovalRows = (a, b) => {
   const deptDiff = compareLabels(a.department, b.department);
   if (deptDiff !== 0) return deptDiff;
   return compareRollNumbers(a.rollNumber, b.rollNumber);
+};
+
+const getStudentSubjectAllocationsForStudent = async (rollNumber) => {
+  const normalizedRoll = (rollNumber || '').toString().trim();
+  if (!normalizedRoll) return [];
+
+  try {
+    return await StudentSubjectAllocation.find({
+      studentRollNumber: { $regex: `^${escapeRegex(normalizedRoll)}$`, $options: 'i' },
+    }).sort({ subjectCode: 1 }).lean();
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to load student subject allocations', err);
+    return [];
+  }
+};
+
+const ensureStudentSubjectAllocationRequest = async (student, allocation) => {
+  if (!student || !student.rollNumber || !allocation || !allocation.subjectCode || !allocation.facultyId) {
+    return;
+  }
+
+  const payload = {
+    rollNumber: student.rollNumber,
+    studentName: student.name || '',
+    subjectCode: allocation.subjectCode,
+    subjectName: allocation.subjectName || allocation.subjectCode,
+    facultyId: allocation.facultyId,
+    department: student.department || student.branch || allocation.department || '',
+    branch: student.branch || allocation.branch || '',
+    year: student.year || allocation.year || '',
+    semester: student.semester || allocation.semester || '',
+    section: student.section || allocation.section || '',
+    reason: `No-due clearance for ${allocation.subjectName || allocation.subjectCode}`,
+    status: 'Pending Faculty',
+    assignment1: false,
+    assignment2: false,
+    facultyNote: '',
+    adminNote: '',
+  };
+
+  await Request.findOneAndUpdate(
+    { rollNumber: student.rollNumber, subjectCode: allocation.subjectCode },
+    { $set: payload },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  );
+};
+
+const ensureStudentSubjectRequestsForStudent = async (student) => {
+  if (!student || !student.rollNumber) return;
+
+  const allocations = await getStudentSubjectAllocationsForStudent(student.rollNumber);
+  if (!allocations.length) return;
+
+  for (const allocation of allocations) {
+    // eslint-disable-next-line no-await-in-loop
+    await ensureStudentSubjectAllocationRequest(student, allocation);
+  }
 };
 
 const countUniqueStudents = (rows = []) => {
@@ -1091,7 +1167,6 @@ const ensureRequestsForSubject = async (subject) => {
 
   const { subjectCode, subjectName, branch, branches, year, semester, facultyIds, sectionFaculty } = subject;
 
-  // Support mapping a subject to one or many branches
   const branchList = Array.isArray(branches) && branches.length
     ? branches.filter(Boolean)
     : (branch ? [branch] : []);
@@ -1099,22 +1174,35 @@ const ensureRequestsForSubject = async (subject) => {
   if (!subjectCode || !branchList.length || !year || !semester) return;
 
   try {
-    const students = await Student.find({ branch: { $in: branchList }, year, semester }).lean();
-    if (!students.length) return;
+    const allocations = await StudentSubjectAllocation.find({ subjectCode }).lean();
+    if (!allocations.length) {
+      await Request.deleteMany({ subjectCode });
+      return;
+    }
 
-    const rollNumbers = students.map((s) => s.rollNumber);
+    const allocationMap = new Map();
+    allocations.forEach((allocation) => {
+      const rollNumber = (allocation.studentRollNumber || '').toString().trim();
+      if (rollNumber) {
+        allocationMap.set(rollNumber.toUpperCase(), allocation);
+      }
+    });
 
+    const subjectStudents = await Student.find({
+      rollNumber: { $in: Array.from(allocationMap.keys()) },
+      branch: { $in: branchList },
+      year,
+      semester,
+    }).lean();
+
+    if (!subjectStudents.length) return;
+
+    const rollNumbers = subjectStudents.map((s) => s.rollNumber);
     const existing = await Request.find({
       subjectCode,
       rollNumber: { $in: rollNumbers },
     }).lean();
 
-    const existingKeys = new Set(existing.map((r) => `${r.rollNumber}`));
-    const defaultFacultyId =
-      Array.isArray(facultyIds) && facultyIds.length ? facultyIds[0] : null;
-    const fallbackFacultyId = await getFallbackFacultyId(defaultFacultyId);
-
-    // Build a map of section → facultyId for quick lookup
     const sectionFacultyMap = new Map();
     if (Array.isArray(sectionFaculty) && sectionFaculty.length) {
       sectionFaculty.forEach(({ section, facultyId }) => {
@@ -1124,34 +1212,51 @@ const ensureRequestsForSubject = async (subject) => {
       });
     }
 
-    const toInsert = [];
-    students.forEach((stu) => {
-      if (!existingKeys.has(stu.rollNumber)) {
-        // Check if there's a section-specific faculty assignment
-        let assignedFacultyId = fallbackFacultyId;
-        if (stu.section && sectionFacultyMap.has(stu.section)) {
-          assignedFacultyId = sectionFacultyMap.get(stu.section);
-        }
+    const expectedRollNumbers = new Set(subjectStudents.map((student) => (student.rollNumber || '').toString().trim().toUpperCase()));
+    const staleRolls = existing
+      .map((request) => (request.rollNumber || '').toString().trim().toUpperCase())
+      .filter((rollNumber) => rollNumber && !expectedRollNumbers.has(rollNumber));
+    if (staleRolls.length) {
+      await Request.deleteMany({ subjectCode, rollNumber: { $in: staleRolls } });
+    }
 
-        toInsert.push({
-          rollNumber: stu.rollNumber,
-          studentName: stu.name,
-          subjectCode,
-          subjectName,
-          facultyId: assignedFacultyId,
-          department: stu.department || stu.branch || '',
-          branch: stu.branch || '',
-          year: stu.year || '',
-          semester: stu.semester || '',
-          section: stu.section || '',
-          reason: `No-due clearance for ${subjectName}`,
-          status: 'Pending Faculty',
-          assignment1: false,
-          assignment2: false,
-          facultyNote: '',
-          adminNote: '',
-        });
+    const toInsert = [];
+    subjectStudents.forEach((stu) => {
+      const normalizedRoll = (stu.rollNumber || '').toString().trim().toUpperCase();
+      const existingEntry = existing.find((row) => (row.rollNumber || '').toString().trim().toUpperCase() === normalizedRoll);
+      if (existingEntry) return;
+
+      const allocation = allocationMap.get(normalizedRoll);
+      let effectiveFacultyId = allocation?.facultyId || null;
+      if (stu.section && sectionFacultyMap.has(stu.section)) {
+        effectiveFacultyId = sectionFacultyMap.get(stu.section);
       }
+      if (allocation && allocation.facultyId) {
+        effectiveFacultyId = allocation.facultyId;
+      }
+
+      if (!effectiveFacultyId) {
+        return;
+      }
+
+      toInsert.push({
+        rollNumber: stu.rollNumber,
+        studentName: stu.name,
+        subjectCode,
+        subjectName,
+        facultyId: effectiveFacultyId,
+        department: stu.department || stu.branch || '',
+        branch: stu.branch || '',
+        year: stu.year || '',
+        semester: stu.semester || '',
+        section: stu.section || '',
+        reason: `No-due clearance for ${subjectName}`,
+        status: 'Pending Faculty',
+        assignment1: false,
+        assignment2: false,
+        facultyNote: '',
+        adminNote: '',
+      });
     });
 
     if (toInsert.length) {
@@ -1437,6 +1542,13 @@ const ensureRole = (...roles) => (req, res, next) => {
   return next();
 };
 
+app.get('/hod/sample-subject-allocation-csv', ensureRole('hod'), (req, res) => {
+  const csv = 'rollNumber\n21A01\n21A02\n21A05\n';
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="sample-subject-allocation.csv"');
+  res.send(csv);
+});
+
 const loadCurrentFaculty = async (req) => {
   if (!req.session.user || !req.session.user.facultyId) return null;
   try {
@@ -1675,6 +1787,7 @@ const renderHodDashboard = async (req, res, extras = {}) => {
   let students = [];
   let faculties = [];
   let subjects = [];
+  let studentSubjectAllocations = [];
   let mentorSubjects = [];
   let objectiveApprovals = [];
   let dataError = null;
@@ -1689,6 +1802,7 @@ const renderHodDashboard = async (req, res, extras = {}) => {
     students = await Student.find().sort({ rollNumber: 1 }).lean();
     faculties = await Faculty.find().sort({ facultyId: 1 }).lean();
     subjects = await Subject.find().sort({ subjectCode: 1 }).lean();
+    studentSubjectAllocations = await StudentSubjectAllocation.find().sort({ studentRollNumber: 1, subjectCode: 1 }).lean();
     mentorSubjects = await MentorSubject.find().sort({ code: 1 }).lean();
     objectiveApprovals = await ObjectiveApproval.find().sort({ createdAt: 1 }).lean();
 
@@ -1804,6 +1918,12 @@ const renderHodDashboard = async (req, res, extras = {}) => {
   }
 
   const hodAnalytics = buildHodAnalytics({ allRequests });
+  const studentNameMap = new Map(
+    students.map((student) => [
+      (student.rollNumber || '').toString().trim().toUpperCase(),
+      student.name || student.studentName || '-',
+    ]),
+  );
 
   const payload = {
     pending: pendingRequests,
@@ -1814,6 +1934,8 @@ const renderHodDashboard = async (req, res, extras = {}) => {
     students,
     faculties,
     subjects,
+    studentSubjectAllocations,
+    studentNameMap,
     mentorSubjects,
     objectiveApprovals,
     self,
@@ -2028,9 +2150,20 @@ app.post('/student/search', async (req, res) => {
       ];
     }
 
-    const subjects = await Subject.find(subjectFilter)
+    const studentAllocations = await getStudentSubjectAllocationsForStudent(student.rollNumber);
+    const allocatedSubjectCodes = new Set(
+      studentAllocations
+        .map((allocation) => (allocation.subjectCode || '').trim())
+        .filter(Boolean),
+    );
+
+    let subjects = await Subject.find(subjectFilter)
       .sort({ subjectCode: 1 })
       .lean();
+
+    if (allocatedSubjectCodes.size) {
+      subjects = subjects.filter((subject) => allocatedSubjectCodes.has((subject.subjectCode || '').trim()));
+    }
 
     // Ensure there is a clearance request for each subject registered by this student
     const subjectCodes = subjects.map((s) => s.subjectCode);
@@ -3832,6 +3965,189 @@ app.post('/hod/faculty/:facultyId/delete', ensureRole('hod'), async (req, res) =
   return res.redirect(redirectToHodPanel(req, 'manage-faculty'));
 });
 
+app.post('/hod/student-subject-allocations', ensureRole('hod'), async (req, res) => {
+  const rawRollNumbers = (req.body.rollNumbers || req.body.rollNumber || '').toString();
+  const subjectCode = (req.body.subjectCode || '').trim();
+  const subjectName = (req.body.subjectName || '').trim();
+  const facultyId = (req.body.facultyId || '').trim();
+  const branch = (req.body.branch || '').trim();
+  const year = (req.body.year || '').trim();
+  const semester = (req.body.semester || '').trim();
+  const section = (req.body.section || '').trim();
+  const department = (req.body.department || '').trim();
+
+  if (!subjectCode || !facultyId || !rawRollNumbers) {
+    return res.redirect(redirectToHodPanel(req, 'manage-subjects'));
+  }
+
+  const normalizedRollNumbers = [...new Set(
+    rawRollNumbers
+      .split(/[\n,]+/)
+      .map((roll) => roll.trim())
+      .filter(Boolean),
+  )];
+
+  if (!normalizedRollNumbers.length) {
+    return res.redirect(redirectToHodPanel(req, 'manage-subjects'));
+  }
+
+  try {
+    const subjectDoc = await Subject.findOne({ subjectCode }).lean();
+
+    for (const rawRoll of normalizedRollNumbers) {
+      // eslint-disable-next-line no-await-in-loop
+      const student = await Student.findOne({
+        rollNumber: { $regex: `^${escapeRegex(rawRoll)}$`, $options: 'i' },
+      }).lean();
+
+      if (!student || !student.rollNumber) continue;
+
+      const allocationPayload = {
+        studentRollNumber: student.rollNumber,
+        subjectCode,
+        subjectName: subjectName || subjectDoc?.subjectName || '',
+        facultyId,
+        department: department || student.department || subjectDoc?.branch || '',
+        branch: branch || student.branch || subjectDoc?.branch || '',
+        year: year || student.year || subjectDoc?.year || '',
+        semester: semester || student.semester || subjectDoc?.semester || '',
+        section: section || student.section || '',
+      };
+
+      // eslint-disable-next-line no-await-in-loop
+      await StudentSubjectAllocation.findOneAndUpdate(
+        { studentRollNumber: student.rollNumber, subjectCode },
+        { $set: allocationPayload },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      );
+
+      // eslint-disable-next-line no-await-in-loop
+      await ensureStudentSubjectAllocationRequest(student, allocationPayload);
+    }
+
+    if (subjectDoc) {
+      await ensureRequestsForSubject(subjectDoc);
+      await syncSubjectRequestsFaculty(subjectDoc);
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to assign partial student subject allotments', err);
+  }
+
+  return res.redirect(redirectToHodPanel(req, 'manage-subjects'));
+});
+
+app.post('/hod/student-subject-allocations/bulk-section', ensureRole('hod'), upload.single('csv'), async (req, res) => {
+  const { subjectCode, facultyId, branch, year, semester, section, department } = req.body;
+  if (!subjectCode || !facultyId || !section) {
+    return res.redirect(redirectToHodPanel(req, 'manage-subjects'));
+  }
+
+  try {
+    const subjectDoc = await Subject.findOne({ subjectCode }).lean();
+    const students = await Student.find({
+      ...(branch ? { branch } : {}),
+      ...(year ? { year } : {}),
+      ...(semester ? { semester } : {}),
+      ...(section ? { section } : {}),
+    }).sort({ rollNumber: 1 }).lean();
+
+    const assignments = students.map((student) => ({
+      studentRollNumber: student.rollNumber,
+      subjectCode,
+      subjectName: subjectDoc?.subjectName || '',
+      facultyId,
+      department: department || student.department || subjectDoc?.branch || '',
+      branch: branch || student.branch || subjectDoc?.branch || '',
+      year: year || student.year || subjectDoc?.year || '',
+      semester: semester || student.semester || subjectDoc?.semester || '',
+      section: section || student.section || '',
+    }));
+
+    for (const assignment of assignments) {
+      // eslint-disable-next-line no-await-in-loop
+      await StudentSubjectAllocation.findOneAndUpdate(
+        { studentRollNumber: assignment.studentRollNumber, subjectCode },
+        { $set: assignment },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      );
+      // eslint-disable-next-line no-await-in-loop
+      const student = await Student.findOne({ rollNumber: assignment.studentRollNumber }).lean();
+      if (student) {
+        // eslint-disable-next-line no-await-in-loop
+        await ensureStudentSubjectAllocationRequest(student, assignment);
+      }
+    }
+
+    if (subjectDoc) {
+      await ensureRequestsForSubject(subjectDoc);
+      await syncSubjectRequestsFaculty(subjectDoc);
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to assign subject allotments by section', err);
+  }
+
+  return res.redirect(redirectToHodPanel(req, 'manage-subjects'));
+});
+
+app.post('/hod/student-subject-allocations/csv', ensureRole('hod'), upload.single('csv'), async (req, res) => {
+  const { subjectCode, facultyId, branch, year, semester, section, department } = req.body;
+  if (!subjectCode || !facultyId || !req.file || !req.file.buffer) {
+    return res.redirect(redirectToHodPanel(req, 'manage-subjects'));
+  }
+
+  try {
+    const text = req.file.buffer.toString('utf8');
+    const lines = text.split(/\r?\n/);
+    const subjectDoc = await Subject.findOne({ subjectCode }).lean();
+    const rollNumbers = [...new Set(
+      lines
+        .map((line) => line.split(',')[0]?.trim())
+        .filter(Boolean),
+    )];
+
+    for (const rollNumber of rollNumbers) {
+      // eslint-disable-next-line no-await-in-loop
+      const student = await Student.findOne({
+        rollNumber: { $regex: `^${escapeRegex(rollNumber)}$`, $options: 'i' },
+      }).lean();
+      if (!student || !student.rollNumber) continue;
+
+      const assignment = {
+        studentRollNumber: student.rollNumber,
+        subjectCode,
+        subjectName: subjectDoc?.subjectName || '',
+        facultyId,
+        department: department || student.department || subjectDoc?.branch || '',
+        branch: branch || student.branch || subjectDoc?.branch || '',
+        year: year || student.year || subjectDoc?.year || '',
+        semester: semester || student.semester || subjectDoc?.semester || '',
+        section: section || student.section || '',
+      };
+
+      // eslint-disable-next-line no-await-in-loop
+      await StudentSubjectAllocation.findOneAndUpdate(
+        { studentRollNumber: assignment.studentRollNumber, subjectCode },
+        { $set: assignment },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      );
+      // eslint-disable-next-line no-await-in-loop
+      await ensureStudentSubjectAllocationRequest(student, assignment);
+    }
+
+    if (subjectDoc) {
+      await ensureRequestsForSubject(subjectDoc);
+      await syncSubjectRequestsFaculty(subjectDoc);
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to assign subject allotments from CSV', err);
+  }
+
+  return res.redirect(redirectToHodPanel(req, 'manage-subjects'));
+});
+
 app.post('/hod/subjects', ensureRole('hod'), async (req, res) => {
   const { subjectCode, subjectName, year, semester } = req.body;
   let { facultyIds, branches, branch } = req.body;
@@ -4110,6 +4426,34 @@ app.post('/hod/mentor-subjects/:id/delete', ensureRole('hod'), async (req, res) 
   return res.redirect(redirectToHodPanel(req, 'manage-mentors'));
 });
 
+app.post('/hod/student-subject-allocations/:id/delete', ensureRole('hod'), async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const allocation = await StudentSubjectAllocation.findById(id).lean();
+    if (!allocation) {
+      return res.redirect(redirectToHodPanel(req, 'manage-subjects'));
+    }
+
+    await StudentSubjectAllocation.deleteOne({ _id: id });
+    await Request.deleteMany({
+      rollNumber: allocation.studentRollNumber,
+      subjectCode: allocation.subjectCode,
+    });
+
+    const subject = await Subject.findOne({ subjectCode: allocation.subjectCode }).lean();
+    if (subject) {
+      await ensureRequestsForSubject(subject);
+      await syncSubjectRequestsFaculty(subject);
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to delete student subject allocation', err);
+  }
+
+  return res.redirect(redirectToHodPanel(req, 'manage-subjects'));
+});
+
 app.post('/hod/subjects/:code/delete', ensureRole('hod'), async (req, res) => {
   const { code } = req.params;
   const { originalBranch } = req.body;
@@ -4120,6 +4464,7 @@ app.post('/hod/subjects/:code/delete', ensureRole('hod'), async (req, res) => {
   try {
     // Delete the subject offering itself
     await Subject.deleteOne(filter);
+    await StudentSubjectAllocation.deleteMany({ subjectCode: code });
 
     // Also delete all associated Requests for this subject offering
     const requestFilter = { subjectCode: code };

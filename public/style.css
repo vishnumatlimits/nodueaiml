@@ -407,14 +407,14 @@ button:hover, .btn-primary:hover, .link-btn:hover {
    on smaller viewports to avoid breaking usability.
    ========================================= */
 .site-canvas {
-    width: 1920px;
-    max-width: 1920px;
-    min-width: 1920px;
-    height: 1080px;
-    min-height: 1080px;
-    margin: 0 auto;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: auto;
+    min-height: 100vh;
+    margin: 0;
     position: relative;
-    overflow: auto;
+    overflow: visible;
     background: transparent;
 }
 
@@ -425,7 +425,7 @@ button:hover, .btn-primary:hover, .link-btn:hover {
         max-width: 100%;
         min-width: 0;
         height: auto;
-        min-height: 0;
+        min-height: 100vh;
         padding: 0 16px;
     }
 }

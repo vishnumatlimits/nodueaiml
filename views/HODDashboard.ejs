@@ -800,6 +800,169 @@
 						});
 					</script>
 
+					<div class="card" style="margin-top:16px;">
+						<div class="flex-between">
+							<h3>Partial student subject allotment</h3>
+							<span class="badge"><%= (studentSubjectAllocations && studentSubjectAllocations.length) ? studentSubjectAllocations.length + ' mapped' : 'No partial mapping' %></span>
+						</div>
+						<p class="muted" style="margin-top:8px;">Use this when only selected students from a class are allotted a subject. Enter one or more roll numbers, or enter them one per line.</p>
+						<form action="/hod/student-subject-allocations" method="POST" class="stack">
+							<div class="grid two">
+								<label class="field">
+									<span>Subject</span>
+									<select name="subjectCode" required>
+										<option value="">Select subject</option>
+										<% subjects.forEach(function(sub){ %>
+											<option value="<%= sub.subjectCode %>"><%= sub.subjectCode %> - <%= sub.subjectName %></option>
+										<% }); %>
+									</select>
+								</label>
+								<label class="field">
+									<span>Faculty for these students</span>
+									<select name="facultyId" required>
+										<option value="">Select faculty</option>
+										<% faculties.forEach(function(f){ %>
+											<option value="<%= f.facultyId %>"><%= f.name %> (<%= f.facultyId %>)</option>
+										<% }); %>
+									</select>
+								</label>
+							</div>
+							<div class="grid two">
+								<label class="field">
+									<span>Student roll numbers</span>
+									<textarea name="rollNumbers" rows="4" placeholder="e.g. 21A01, 21A02, 21A05 or one per line" required></textarea>
+								</label>
+								<label class="field">
+									<span>Optional overrides</span>
+									<div class="stack" style="gap:8px;">
+										<input type="text" name="branch" placeholder="Branch (optional)" />
+										<input type="text" name="year" placeholder="Year (optional)" />
+										<input type="text" name="semester" placeholder="Semester (optional)" />
+										<input type="text" name="section" placeholder="Section (optional)" />
+										<input type="text" name="department" placeholder="Department (optional)" />
+									</div>
+								</label>
+							</div>
+							<button type="submit" class="btn btn-accent">Assign selected students</button>
+						</form>
+
+						<div class="card" style="margin-top:18px; padding:20px;">
+							<div class="flex-between">
+								<h4>Bulk assign by class section</h4>
+								<span class="badge">shortcut</span>
+							</div>
+							<form action="/hod/student-subject-allocations/bulk-section" method="POST" class="stack" style="margin-top:12px;">
+								<div class="grid two">
+									<label class="field">
+										<span>Subject</span>
+										<select name="subjectCode" required>
+											<option value="">Select subject</option>
+											<% subjects.forEach(function(sub){ %>
+												<option value="<%= sub.subjectCode %>"><%= sub.subjectCode %> - <%= sub.subjectName %></option>
+											<% }); %>
+										</select>
+									</label>
+									<label class="field">
+										<span>Faculty</span>
+										<select name="facultyId" required>
+											<option value="">Select faculty</option>
+											<% faculties.forEach(function(f){ %>
+												<option value="<%= f.facultyId %>"><%= f.name %> (<%= f.facultyId %>)</option>
+											<% }); %>
+										</select>
+									</label>
+								</div>
+								<div class="grid two">
+									<label class="field">
+										<span>Branch</span>
+										<input type="text" name="branch" placeholder="CSE" />
+									</label>
+									<label class="field">
+										<span>Section</span>
+										<input type="text" name="section" placeholder="A" required />
+									</label>
+								</div>
+								<div class="grid two">
+									<label class="field">
+										<span>Year</span>
+										<input type="text" name="year" placeholder="II" />
+									</label>
+									<label class="field">
+										<span>Semester</span>
+										<input type="text" name="semester" placeholder="I" />
+									</label>
+								</div>
+								<input type="text" name="department" placeholder="Department (optional)" />
+								<button type="submit" class="btn btn-outline-primary">Assign all students in this section</button>
+							</form>
+						</div>
+
+						<div class="card" style="margin-top:18px; padding:20px;">
+							<div class="flex-between">
+								<h4>CSV upload</h4>
+								<span class="badge">import</span>
+							</div>
+							<form action="/hod/student-subject-allocations/csv" method="POST" enctype="multipart/form-data" class="stack" style="margin-top:12px;">
+								<div class="grid two">
+									<label class="field">
+										<span>Subject</span>
+										<select name="subjectCode" required>
+											<option value="">Select subject</option>
+											<% subjects.forEach(function(sub){ %>
+												<option value="<%= sub.subjectCode %>"><%= sub.subjectCode %> - <%= sub.subjectName %></option>
+											<% }); %>
+										</select>
+									</label>
+									<label class="field">
+										<span>Faculty</span>
+										<select name="facultyId" required>
+											<option value="">Select faculty</option>
+											<% faculties.forEach(function(f){ %>
+												<option value="<%= f.facultyId %>"><%= f.name %> (<%= f.facultyId %>)</option>
+											<% }); %>
+										</select>
+									</label>
+								</div>
+								<input type="file" name="csv" accept=".csv,text/csv" required />
+								<p class="muted" style="margin:0;">CSV should have the roll numbers in the first column (or first value of each line).</p>
+								<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+									<a href="/hod/sample-subject-allocation-csv" class="btn btn-outline-primary" download>Download sample CSV</a>
+									<button type="submit" class="btn btn-accent">Import CSV allocations</button>
+								</div>
+							</form>
+						</div>
+
+						<% if (studentSubjectAllocations && studentSubjectAllocations.length) { %>
+							<div style="margin-top:16px;">
+								<h4>Current partial allotments</h4>
+								<table style="margin-top:8px;">
+									<tr>
+										<th>Student</th>
+										<th>Subject</th>
+										<th>Faculty</th>
+										<th>Year</th>
+										<th>Section</th>
+										<th>Action</th>
+									</tr>
+									<% studentSubjectAllocations.forEach(function(allocation){ %>
+										<tr>
+											<td><%= allocation.studentRollNumber || '-' %> <% if (studentNameMap && studentNameMap.get((allocation.studentRollNumber || '').toUpperCase())) { %><span class="muted">(<%= studentNameMap.get((allocation.studentRollNumber || '').toUpperCase()) %>)</span><% } %></td>
+											<td><%= allocation.subjectCode || '-' %></td>
+											<td><%= allocation.facultyId || '-' %></td>
+											<td><%= allocation.year || '-' %></td>
+											<td><%= allocation.section || '-' %></td>
+											<td>
+												<form action="/hod/student-subject-allocations/<%= allocation._id %>/delete" method="POST" onsubmit="return confirm('Remove this student subject allotment?');">
+													<button type="submit" class="btn btn-danger btn-sm">Remove</button>
+												</form>
+											</td>
+										</tr>
+									<% }); %>
+								</table>
+							</div>
+						<% } %>
+					</div>
+
 					<div class="card">
 						<div class="flex-between">
 							<h3>Subjects list</h3>
